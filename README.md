@@ -346,7 +346,35 @@ This architecture ensures FlowForge is a "quiet observer" that is lightning-fast
 ---
 
 ## Run the application
-On Windows, create C:\dev\flowforge. Use Powershell and run the below commands to launch the application after unzipping this repository.
+
+Install the following on Windows.
+1. Node.js 22 (download from https://nodejs.org/)
+
+**Verify:**
+node --version
+npm --version
+
+2. Rust toolchain
+Install from https://rustup.rs/
+
+**Verify:**
+rustc --version
+cargo --version
+
+3. Visual Studio Build Tools with C++ workload from https://visualstudio.microsoft.com/visual-cpp-build-tools/
+
+In the installer, select:
+- Desktop development with C++
+- MSVC v143 or latest
+- Windows 10/11 SDK
+- C++ CMake tools for Windows
+
+4. WebView2 Runtime
+Usually already present. If not, install from https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+
+Then,
+create C:\dev\flowforge.
+Use Powershell and run the below commands to launch the application after unzipping this repository.
 cd C:\dev\flowforge
 npm install
 npm run tauri dev
