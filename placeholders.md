@@ -5,4 +5,3 @@ Track intentional placeholders, temporary rule-based fallbacks, or incomplete im
 | File | Placeholder | Reason | Exit Condition |
 | --- | --- | --- | --- |
 | `src-tauri/src/services/mod.rs` | Morning briefing and stuck suggestions are rule-based text generation. | Phase 1 defers full AI-assisted coaching. | Replace deterministic prompts with provider-backed structured prompting when the AI layer is implemented. |
-| `src-tauri/icons/icon.png` | Minimal placeholder application icon. | Current asset only satisfies Tauri build requirements. | Replace with production desktop icon set for Windows, macOS, and Linux packaging. |

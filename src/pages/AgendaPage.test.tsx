@@ -101,4 +101,12 @@ describe("AgendaPage", () => {
       "2026-05-06"
     );
   });
+
+  it("moves a planned task back to inbox", () => {
+    render(<AgendaPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /back to inbox/i }));
+
+    expect(updateTask).toHaveBeenCalledWith("planned-1", { dueAt: "" }, "2026-05-06");
+  });
 });

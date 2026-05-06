@@ -24,7 +24,7 @@ FlowForge is a Windows-first Tauri desktop application for agenda management, da
 
 ## Current Phase 1 Features
 - Today dashboard with daily outcomes and quick task capture
-- Dedicated Agenda page with inbox triage and “plan today” workflow
+- Dedicated Agenda page with inbox triage, rescheduling controls, due-date editing, and “back to inbox” workflow
 - Task detail panel with edit controls and micro-task breakdown
 - Project creation and archiving
 - Rule-based `Unstick Me` prompt generation

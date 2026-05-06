@@ -231,7 +231,11 @@ impl Database {
             task.priority = priority;
         }
         if let Some(due_at) = patch.due_at {
-            task.due_at = Some(due_at);
+            task.due_at = if due_at.trim().is_empty() {
+                None
+            } else {
+                Some(due_at)
+            };
         }
         if let Some(estimated_minutes) = patch.estimated_minutes {
             task.estimated_minutes = Some(estimated_minutes);
@@ -769,5 +773,38 @@ mod tests {
         assert!(db.list_projects().unwrap().is_empty());
         assert!(db.list_daily_outcomes("%").unwrap().is_empty());
         assert_eq!(db.get_app_settings().unwrap().default_ai_provider, "openai");
+    }
+
+    #[test]
+    fn can_clear_due_date_when_rescheduling_back_to_inbox() {
+        let db = Database::new_in_memory().unwrap();
+        let task = db
+            .create_task(CreateTaskRequest {
+                project_id: None,
+                title: "Reschedule me".to_string(),
+                description: None,
+                priority: Some(2),
+                due_at: Some("2026-05-06T17:00:00".to_string()),
+                estimated_minutes: Some(20),
+                good_enough_definition: None,
+            })
+            .unwrap();
+
+        let updated = db
+            .update_task(
+                &task.id,
+                UpdateTaskRequest {
+                    project_id: None,
+                    title: None,
+                    description: None,
+                    priority: None,
+                    due_at: Some(String::new()),
+                    estimated_minutes: None,
+                    good_enough_definition: None,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(updated.due_at, None);
     }
 }
