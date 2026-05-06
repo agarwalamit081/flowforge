@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { useFlowForgeStore } from "../stores/useFlowForgeStore";
 
 interface SettingsValues {
@@ -65,13 +67,13 @@ export function SettingsPage() {
                 const bundle = await exportUserData();
                 const content = JSON.stringify(bundle, null, 2);
                 setExportPreview(content);
-                const blob = new Blob([content], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const anchor = document.createElement("a");
-                anchor.href = url;
-                anchor.download = `flowforge-export-${today}.json`;
-                anchor.click();
-                URL.revokeObjectURL(url);
+                const path = await save({
+                  defaultPath: `flowforge-export-${today}.json`,
+                  filters: [{ name: "JSON", extensions: ["json"] }]
+                });
+                if (path) {
+                  await writeTextFile(path, content);
+                }
               }}
               type="button"
             >

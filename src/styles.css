@@ -10,10 +10,23 @@
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
 
+:root.theme-light {
+  color: #16211d;
+}
+
+:root.theme-dark {
+  color: #e7f0ea;
+  background:
+    radial-gradient(circle at top left, rgba(233, 140, 104, 0.15), transparent 28%),
+    linear-gradient(180deg, #11201a 0%, #0b1511 100%);
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: inherit;
+  color: inherit;
 }
 
 #root {
@@ -34,4 +47,64 @@ body {
 
 .input {
   @apply w-full rounded-2xl border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-moss focus:ring-2 focus:ring-moss/20;
+}
+
+.theme-dark body,
+.theme-dark #root {
+  color: #e7f0ea;
+}
+
+.theme-dark .card {
+  border-color: rgba(169, 201, 184, 0.12);
+  background: rgba(15, 25, 20, 0.86);
+  color: #e7f0ea;
+}
+
+.theme-dark .input {
+  border-color: rgba(169, 201, 184, 0.18);
+  background: rgba(9, 15, 12, 0.92);
+  color: #eef6f0;
+}
+
+.theme-dark .button-secondary {
+  border-color: rgba(169, 201, 184, 0.24);
+  color: #e7f0ea;
+}
+
+.theme-dark .button-secondary:hover {
+  border-color: #a9c9b8;
+  color: #d8ecde;
+}
+
+.theme-dark .bg-white,
+.theme-dark .bg-white\/70,
+.theme-dark .bg-white\/80 {
+  background-color: rgba(16, 25, 20, 0.86) !important;
+}
+
+.theme-dark .border-white\/70 {
+  border-color: rgba(169, 201, 184, 0.12) !important;
+}
+
+.theme-dark .text-ink {
+  color: #edf5ef !important;
+}
+
+.theme-dark .text-ink\/80 {
+  color: rgba(237, 245, 239, 0.82) !important;
+}
+
+.theme-dark .text-ink\/70,
+.theme-dark .text-ink\/60,
+.theme-dark .text-ink\/50 {
+  color: rgba(220, 233, 225, 0.72) !important;
+}
+
+.theme-dark .text-moss {
+  color: #b6d9c5 !important;
+}
+
+.theme-dark .bg-leaf\/20,
+.theme-dark .bg-leaf\/30 {
+  background-color: rgba(88, 124, 106, 0.26) !important;
 }

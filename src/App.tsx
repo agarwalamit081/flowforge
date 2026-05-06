@@ -1,10 +1,12 @@
 import { NavLink, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
 import { Inbox, LayoutDashboard, FolderKanban, Settings, Sunrise } from "lucide-react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { BriefingPage } from "./pages/BriefingPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { useFlowForgeStore } from "./stores/useFlowForgeStore";
 
 const navItems = [
   { to: "/", label: "Today", icon: LayoutDashboard },
@@ -15,6 +17,30 @@ const navItems = [
 ];
 
 export default function App() {
+  const { settings, loadSettings } = useFlowForgeStore();
+
+  useEffect(() => {
+    if (!settings) {
+      void loadSettings();
+    }
+  }, [loadSettings, settings]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const applyTheme = () => {
+      const mode = settings?.theme ?? "system";
+      const resolved = mode === "system" ? (mediaQuery.matches ? "dark" : "light") : mode;
+      root.classList.remove("theme-light", "theme-dark");
+      root.classList.add(resolved === "dark" ? "theme-dark" : "theme-light");
+    };
+
+    applyTheme();
+    mediaQuery.addEventListener("change", applyTheme);
+    return () => mediaQuery.removeEventListener("change", applyTheme);
+  }, [settings?.theme]);
+
   return (
     <div className="min-h-screen px-4 py-6 text-ink md:px-8">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[240px_1fr]">

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default desktop capability for FlowForge",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": ["core:default", "opener:default", "dialog:default", "fs:default"]
 }
