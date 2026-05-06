@@ -373,13 +373,12 @@ In the installer, select:
 Usually already present. If not, install from https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 
 Then,
-create C:\dev\flowforge.
-Use Powershell and run the below commands to launch the application after unzipping this repository.
-cd C:\dev\flowforge
-npm install
-npm run tauri dev
-npm run tauri:dev
-npm run tauri:build
+- create C:\dev\flowforge.
+- Use Powershell and run the below commands to launch the application after unzipping this repository.
+- cd C:\dev\flowforge
+- npm install
+- npm run tauri:dev
+- npm run tauri:build
 
 ---
 
