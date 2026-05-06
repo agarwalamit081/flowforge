@@ -111,3 +111,11 @@ export interface AppSettings {
   defaultAiProvider: string;
   defaultAiModel: string;
 }
+
+export interface ExportBundle {
+  projects: Project[];
+  tasks: Task[];
+  dailyOutcomes: DailyOutcome[];
+  focusSessions: FocusSession[];
+  settings: AppSettings;
+}

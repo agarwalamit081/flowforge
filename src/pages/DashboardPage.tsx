@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { TaskComposer } from "../components/TaskComposer";
 import { OutcomeComposer } from "../components/OutcomeComposer";
 import { TaskCard } from "../components/TaskCard";
+import { TaskDetailPanel } from "../components/TaskDetailPanel";
 import { api } from "../lib/tauri";
 import { useFlowForgeStore } from "../stores/useFlowForgeStore";
 
@@ -11,8 +12,23 @@ function todayKey() {
 
 export function DashboardPage() {
   const date = todayKey();
-  const { agenda, briefing, error, latestSuggestion, loadDashboard, createTask, createDailyOutcome, setTaskStatus, markStuck } =
-    useFlowForgeStore();
+  const {
+    agenda,
+    briefing,
+    error,
+    latestSuggestion,
+    activeTask,
+    loadDashboard,
+    createTask,
+    createDailyOutcome,
+    setTaskStatus,
+    markStuck,
+    selectTask,
+    updateTask,
+    deleteTask,
+    createMicroTask,
+    completeMicroTask
+  } = useFlowForgeStore();
 
   useEffect(() => {
     void loadDashboard(date);
@@ -28,7 +44,7 @@ export function DashboardPage() {
         </p>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[360px_1fr] 2xl:grid-cols-[360px_1fr_420px]">
         <div className="space-y-6">
           <OutcomeComposer date={date} onCreate={createDailyOutcome} />
           <TaskComposer
@@ -75,6 +91,7 @@ export function DashboardPage() {
               <TaskCard
                 key={task.id}
                 task={task}
+                onOpen={(selectedTask) => selectTask(selectedTask.id)}
                 onStart={async (selectedTask) => {
                   await api.startFocusSession(selectedTask.id, selectedTask.estimatedMinutes ?? 25);
                   await setTaskStatus(selectedTask.id, "in_progress", date);
@@ -89,6 +106,16 @@ export function DashboardPage() {
             {!agenda?.tasks.length && <div className="card text-sm text-ink/60">No tasks scheduled for today yet.</div>}
           </section>
         </div>
+        <TaskDetailPanel
+          task={activeTask}
+          onClose={() => {
+            void selectTask(null);
+          }}
+          onSave={(patch) => updateTask(activeTask!.id, patch, date)}
+          onDelete={() => deleteTask(activeTask!.id, date)}
+          onAddMicroTask={(input) => createMicroTask(activeTask!.id, input)}
+          onCompleteMicroTask={(microTaskId) => completeMicroTask(activeTask!.id, microTaskId)}
+        />
       </div>
     </div>
   );

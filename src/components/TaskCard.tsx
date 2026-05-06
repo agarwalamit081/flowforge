@@ -11,17 +11,20 @@ const priorityBorders: Record<Task["priority"], string> = {
 
 interface TaskCardProps {
   task: Task;
+  onOpen: (task: Task) => Promise<void> | void;
   onStart: (task: Task) => Promise<void>;
   onMarkDone: (task: Task) => Promise<void>;
   onStuck: (task: Task) => Promise<void>;
 }
 
-export function TaskCard({ task, onStart, onMarkDone, onStuck }: TaskCardProps) {
+export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCardProps) {
   return (
     <article className={`card border-l-4 ${priorityBorders[task.priority]}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-lg font-semibold">{task.title}</h3>
+          <button className="text-left" onClick={() => onOpen(task)} type="button">
+            <h3 className="text-lg font-semibold">{task.title}</h3>
+          </button>
           <p className="mt-1 text-sm text-ink/70">
             Status: {task.status.replace("_", " ")} · Est. {task.estimatedMinutes ?? 0} min
           </p>
