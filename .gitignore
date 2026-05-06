@@ -1,0 +1,33 @@
+# Node / frontend
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Rust / Tauri
+target/
+src-tauri/target/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Local app and test data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+exports/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# Project-local agent/runtime state
+.codex/
+
