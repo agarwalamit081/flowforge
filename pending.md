@@ -6,7 +6,6 @@ Track work that could not be completed because of an external blocker, environme
 |---|---|---|---|---|
 | 2026-05-06 | Run native Windows smoke test for tray, window, and installer behavior. | Current environment is Linux; Phase 1 release target is Windows. | Verify `npm run tauri dev` and packaged app on Windows. Use `TESTING.md` checklist. Document findings in `README.md`. |
 | 2026-05-06 | Complete Windows-specific active window tracking. | Phase 2 requires platform-specific Win32 APIs. | Implement Windows-only window tracking using GetForegroundWindow/GetWindowText APIs. See `TESTING.md` for testing procedures. |
-| 2026-05-06 | Enhance Command Palette (Ctrl+K). | Keyboard shortcut exists but UI not implemented. | Create command palette component with task search and quick navigation. |
 
 ## Completed Items
 
@@ -25,6 +24,7 @@ Track work that could not be completed because of an external blocker, environme
 | 2026-05-06 | Onboarding flow | COMPLETED - Created OnboardingWizard with 5-step tour |
 | 2026-05-06 | Testing documentation | COMPLETED - Created `TESTING.md` with comprehensive checklist |
 | 2026-05-06 | Phase 1 runtime bugs and UI feedback | COMPLETED - Added error display and loading indicators to BriefingPage, ContextPage, AgendaPage; buttons now show loading states and errors |
+| 2026-05-06 | Command Palette (Ctrl+K) | COMPLETED - Created searchable command palette with navigation, actions, and task commands; keyboard navigation support |
 
 ## Review Schedule
 
