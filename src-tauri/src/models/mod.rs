@@ -378,3 +378,28 @@ pub struct CreateMonitoringRuleRequest {
     pub action: String,
     pub reason: Option<String>,
 }
+
+// =============================================
+// Phase 3: AI Task Decomposition & Intervention
+// =============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    pub id: String,
+    pub task_id: String,
+    pub role: String,
+    pub content: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiUsageStats {
+    pub request_count: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cost_cents: i64,
+    pub avg_latency_ms: f64,
+}
+

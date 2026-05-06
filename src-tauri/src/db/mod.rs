@@ -12,6 +12,7 @@ use crate::services;
 
 const MIGRATION_0001: &str = include_str!("migrations/0001_initial.sql");
 const MIGRATION_0002: &str = include_str!("migrations/0002_phase2_context.sql");
+const MIGRATION_0003: &str = include_str!("migrations/0003_phase3_ai.sql");
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -38,6 +39,7 @@ impl Database {
         let connection = Connection::open(path)?;
         connection.execute_batch(MIGRATION_0001)?;
         connection.execute_batch(MIGRATION_0002)?;
+        connection.execute_batch(MIGRATION_0003)?;
         let db = Self {
             connection: Mutex::new(connection),
             default_ai_provider,
@@ -53,6 +55,7 @@ impl Database {
         let connection = Connection::open_in_memory()?;
         connection.execute_batch(MIGRATION_0001)?;
         connection.execute_batch(MIGRATION_0002)?;
+        connection.execute_batch(MIGRATION_0003)?;
         let db = Self {
             connection: Mutex::new(connection),
             default_ai_provider: "openai".to_string(),
@@ -907,6 +910,181 @@ impl Database {
             active_event.as_ref(),
             active_focus_block.as_ref(),
         ))
+    }
+
+    // =============================================
+    // AI Request Logging (Phase 3)
+    // =============================================
+
+    pub fn log_ai_request(
+        &self,
+        provider: &str,
+        model: &str,
+        task_id: Option<&str>,
+        request_type: &str,
+        prompt_template_id: &str,
+        prompt_hash: &str,
+    ) -> AppResult<String> {
+        let conn = self.conn();
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO ai_requests (id, provider, model, task_id, request_type, prompt_hash, prompt_template_id, status, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                &id,
+                provider,
+                model,
+                task_id,
+                request_type,
+                prompt_hash,
+                prompt_template_id,
+                "pending",
+                now(),
+            ],
+        )?;
+        Ok(id)
+    }
+
+    pub fn update_ai_request_success(
+        &self,
+        request_id: &str,
+        input_tokens: i64,
+        output_tokens: i64,
+        cost_estimate_cents: i64,
+        latency_ms: i64,
+    ) -> AppResult<()> {
+        self.conn().execute(
+            "UPDATE ai_requests SET status = ?1, input_tokens = ?2, output_tokens = ?3, cost_estimate_cents = ?4, latency_ms = ?5
+             WHERE id = ?6",
+            params!["success", input_tokens, output_tokens, cost_estimate_cents, latency_ms, request_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_ai_request_failure(&self, request_id: &str, error_message: &str) -> AppResult<()> {
+        self.conn().execute(
+            "UPDATE ai_requests SET status = ?1, error_message = ?2 WHERE id = ?3",
+            params!["failed", error_message, request_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn save_ai_output(
+        &self,
+        ai_request_id: &str,
+        output_type: &str,
+        output_json: &str,
+    ) -> AppResult<String> {
+        let conn = self.conn();
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO ai_outputs (id, ai_request_id, output_type, output_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![&id, ai_request_id, output_type, output_json, now()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn accept_ai_output(&self, output_id: &str) -> AppResult<()> {
+        self.conn().execute(
+            "UPDATE ai_outputs SET accepted_by_user = 1, accepted_at = ?1 WHERE id = ?2",
+            params![now(), output_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_intervention_event(
+        &self,
+        trigger_type: &str,
+        task_id: Option<&str>,
+        focus_session_id: Option<&str>,
+        context_snapshot_json: Option<&str>,
+        intervention_type: &str,
+        intervention_source: &str,
+    ) -> AppResult<String> {
+        let conn = self.conn();
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO intervention_events (id, trigger_type, task_id, focus_session_id, context_snapshot_json, intervention_type, intervention_source, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                &id,
+                trigger_type,
+                task_id,
+                focus_session_id,
+                context_snapshot_json,
+                intervention_type,
+                intervention_source,
+                now(),
+            ],
+        )?;
+        Ok(id)
+    }
+
+    pub fn save_chat_message(&self, task_id: &str, role: &str, content: &str) -> AppResult<String> {
+        let conn = self.conn();
+        let id = Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO chat_messages (id, task_id, role, content, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![&id, task_id, role, content, now()],
+        )?;
+        Ok(id)
+    }
+
+    pub fn get_chat_messages(&self, task_id: &str) -> AppResult<Vec<ChatMessage>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, task_id, role, content, created_at
+             FROM chat_messages
+             WHERE task_id = ?1
+             ORDER BY created_at ASC",
+        )?;
+        let rows = statement.query_map(params![task_id], |row| {
+            Ok(ChatMessage {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                role: row.get(2)?,
+                content: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        collect_rows(rows)
+    }
+
+    pub fn get_ai_usage_stats(&self, start: &str, end: &str) -> AppResult<AiUsageStats> {
+        let conn = self.conn();
+        let row = conn.query_row(
+            "SELECT
+                COUNT(*) as request_count,
+                COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+                COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+                COALESCE(SUM(cost_estimate_cents), 0) as total_cost_cents,
+                COALESCE(AVG(latency_ms), 0) as avg_latency_ms
+             FROM ai_requests
+             WHERE status = 'success' AND created_at >= ?1 AND created_at <= ?2",
+            params![start, end],
+            |row| {
+                Ok(AiUsageStats {
+                    request_count: row.get(0)?,
+                    total_input_tokens: row.get(1)?,
+                    total_output_tokens: row.get(2)?,
+                    total_cost_cents: row.get(3)?,
+                    avg_latency_ms: row.get(4)?,
+                })
+            },
+        )?;
+        Ok(row)
+    }
+
+    pub fn delete_ai_data(&self) -> AppResult<()> {
+        let conn = self.conn();
+        // Delete in correct order due to foreign key constraints
+        conn.execute("DELETE FROM chat_messages", [])?;
+        conn.execute("DELETE FROM intervention_events", [])?;
+        conn.execute("DELETE FROM ai_outputs", [])?;
+        conn.execute("DELETE FROM ai_requests", [])?;
+        Ok(())
     }
 
     fn list_daily_outcomes(&self, date: &str) -> AppResult<Vec<DailyOutcome>> {
