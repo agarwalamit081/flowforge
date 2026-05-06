@@ -346,7 +346,7 @@ This architecture ensures FlowForge is a "quiet observer" that is lightning-fast
 ---
 
 ## Run the application
-On Windows, create C:\dev\flowforge. Use Powershell and run the below commands to launch the application.
+On Windows, create C:\dev\flowforge. Use Powershell and run the below commands to launch the application after unzipping this repository.
 cd C:\dev\flowforge
 npm install
 npm run tauri dev
