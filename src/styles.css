@@ -177,5 +177,10 @@ body {
 
 /* Fix for active navigation state */
 .theme-dark a.bg-ink {
-  background-color: #1e2f28;
+  background-color: #2e5e4e;
+}
+
+/* Fix for navigation hover state */
+.theme-dark nav a:hover.bg-leaf\/30 {
+  background-color: rgba(46, 94, 78, 0.35);
 }

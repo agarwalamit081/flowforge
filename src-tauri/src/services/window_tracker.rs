@@ -5,6 +5,15 @@ use tauri::{AppHandle, Manager};
 use crate::db::Database;
 use crate::models::{ActivitySegment, MonitoringRule};
 
+#[cfg(target_os = "windows")]
+use windows::{
+    core::*,
+    Win32::Foundation::*,
+    Win32::System::ProcessStatus::*,
+    Win32::System::Threading::*,
+    Win32::UI::WindowsAndMessaging::*,
+};
+
 enum PrivacyState {
     Allowed,
     RedactedTitle,
@@ -56,14 +65,107 @@ impl WindowTracker {
 
     #[cfg(target_os = "windows")]
     fn get_active_window(&self) -> WindowInfo {
-        // Windows-specific implementation using Win32 APIs
-        // This would use GetForegroundWindow, GetWindowText, etc.
-        // For now, return a placeholder
-        WindowInfo {
-            app_name: Some("unknown".to_string()),
-            process_name: Some("unknown".to_string()),
-            window_title: None, // Will be redacted based on privacy rules
-            domain: None,
+        unsafe {
+            // Get the foreground window handle
+            let hwnd = GetForegroundWindow();
+
+            if hwnd.is_invalid() {
+                return WindowInfo {
+                    app_name: None,
+                    process_name: None,
+                    window_title: None,
+                    domain: None,
+                };
+            }
+
+            // Get the window title
+            let mut title_buffer = [0u16; 512];
+            let length = GetWindowTextW(hwnd, &mut title_buffer);
+            let window_title = if length > 0 {
+                let title_str = String::from_utf16_lossy(&title_buffer[..length as usize]);
+                Some(title_str)
+            } else {
+                None
+            };
+
+            // Get the process ID for the window
+            let mut process_id: u32 = 0;
+            GetWindowThreadProcessId(hwnd, &mut process_id as *mut u32);
+
+            // Open the process to get its name
+            let app_name = if process_id != 0 {
+                match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) {
+                    Ok(handle) if !handle.is_invalid() => {
+                        let mut name_buffer = [0u16; 260];
+                        let mut size = name_buffer.len() as u32;
+                        let result = QueryFullProcessImageNameW(
+                            handle,
+                            PROCESS_NAME_WIN32,
+                            PWSTR(name_buffer.as_mut_ptr()),
+                            &mut size,
+                        );
+
+                        let _ = CloseHandle(handle);
+
+                        if result.is_ok() && size > 0 {
+                            let path = String::from_utf16_lossy(&name_buffer[..size as usize]);
+                            // Extract just the filename from the path
+                            Some(
+                                path.split('\\')
+                                    .last()
+                                    .unwrap_or(&path)
+                                    .to_string(),
+                            )
+                        } else {
+                            // Fallback to trying to get the module name
+                            let mut name_buffer = [0u16; 260];
+                            let mut size = name_buffer.len() as u32;
+                            if GetModuleBaseNameW(
+                                handle,
+                                HMODULE::default(),
+                                &mut name_buffer,
+                                size,
+                            ) > 0
+                            {
+                                let name =
+                                    String::from_utf16_lossy(&name_buffer[..name_buffer.iter()
+                                        .position(|&c| c == 0)
+                                        .unwrap_or(name_buffer.len())]);
+                                Some(name)
+                            } else {
+                                Some(format!("Process_{}", process_id))
+                            }
+                        }
+                    }
+                    _ => Some(format!("Process_{}", process_id)),
+                }
+            } else {
+                None
+            };
+
+            // Extract domain from window title if it looks like a browser URL
+            let domain = window_title.as_ref().and_then(|title| {
+                // Look for browser URL patterns
+                if title.contains(" - ") {
+                    let parts: Vec<&str> = title.split(" - ").collect();
+                    if parts.len() >= 2 {
+                        let potential_url = parts.last().unwrap_or("");
+                        if potential_url.starts_with("http://") || potential_url.starts_with("https://") {
+                            if let Ok(parsed) = url::Url::parse(potential_url) {
+                                return parsed.host_str().map(|h| h.to_string());
+                            }
+                        }
+                    }
+                }
+                None
+            });
+
+            WindowInfo {
+                app_name: app_name.clone(),
+                process_name: app_name,
+                window_title,
+                domain,
+            }
         }
     }
 

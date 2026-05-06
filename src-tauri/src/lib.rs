@@ -140,7 +140,15 @@ pub fn run() {
             create_monitoring_rule,
             delete_monitoring_rule,
             get_activity_log,
-            get_context_snapshot
+            get_context_snapshot,
+            // Phase 3: AI-Powered Commands
+            decompose_task,
+            clarify_goal,
+            get_stuck_intervention,
+            send_chat_message,
+            get_ai_usage_stats,
+            delete_ai_data,
+            test_ai_connection
         ])
         .run(tauri::generate_context!())
         .expect("error while running FlowForge");

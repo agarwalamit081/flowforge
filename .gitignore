@@ -1,33 +1,44 @@
-# Node / frontend
-node_modules/
-dist/
-.vite/
-coverage/
-
-# Rust / Tauri
-target/
-src-tauri/target/
-
-# Env and secrets
+# Environment files
 .env
 .env.*
-!.env.example
 
-# Local app and test data
+# Documentation
+README.md
+docs/
+
+# IDE and editor files
+.codex/
+.claude/
+.agents/
+AGENTS.md
+CLAUDE.md
+
+# Screenshots
+screenshots/
+
+# Build artifacts
+node_modules/
+src-tauri/target/
+dist/
+
+# Database files
 *.db
 *.db-shm
 *.db-wal
-*.sqlite
-*.sqlite3
-exports/
 
-# OS / editor noise
+# Logs
+*.log
+
+# OS files
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
-*.log
-*.Zone.Identifier
 
-# Project-local agent/runtime state
-.codex/
+# Exports
+exports/
+
+# Test coverage
+coverage/
+
+# Temporary files
+*.tmp
+*.temp

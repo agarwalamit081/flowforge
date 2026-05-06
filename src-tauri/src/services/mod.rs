@@ -1,7 +1,11 @@
 mod calendar_sync;
+mod llm_gateway;
+mod prompts;
 mod window_tracker;
 
 pub use calendar_sync::CalendarSyncService;
+pub use llm_gateway::{LlmProvider, LlmRequest, OpenAiProvider};
+pub use prompts::*;
 pub use window_tracker::WindowTracker;
 
 use std::time::Duration;
@@ -205,6 +209,7 @@ fn generate_openai_briefing(
         .json(&json!({
             "model": model,
             "response_format": { "type": "json_object" },
+            "max_tokens": 1000,
             "messages": [
                 {
                     "role": "system",
@@ -239,6 +244,7 @@ fn generate_openai_stuck(
         .json(&json!({
             "model": model,
             "response_format": { "type": "json_object" },
+            "max_tokens": 1000,
             "messages": [
                 {
                     "role": "system",
@@ -274,7 +280,7 @@ fn generate_anthropic_briefing(
         .header("anthropic-version", "2023-06-01")
         .json(&json!({
             "model": model,
-            "max_tokens": 300,
+            "max_tokens": 1000,
             "messages": [
                 {
                     "role": "user",
@@ -308,7 +314,7 @@ fn generate_anthropic_stuck(
         .header("anthropic-version", "2023-06-01")
         .json(&json!({
             "model": model,
-            "max_tokens": 220,
+            "max_tokens": 1000,
             "messages": [
                 {
                     "role": "user",

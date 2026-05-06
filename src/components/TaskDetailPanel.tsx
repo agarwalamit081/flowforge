@@ -1,7 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { Archive, CheckCircle2, X } from "lucide-react";
-import type { Task } from "../types/domain";
+import { Archive, CheckCircle2, Sparkles, Target, X, MessageSquare } from "lucide-react";
+import { api } from "../lib/tauri";
+import { TaskDecompositionPanel } from "./TaskDecompositionPanel";
+import { GoalClarifierPanel } from "./GoalClarifierPanel";
+import { CoachingChatPanel } from "./CoachingChatPanel";
+import type { Task, MicroTaskSuggestion, GoalClarificationResult } from "../types/domain";
 
 interface TaskDetailPanelProps {
   task: Task | null;
@@ -17,6 +21,7 @@ interface TaskDetailPanelProps {
   onDelete: () => Promise<void>;
   onAddMicroTask: (input: { title: string; estimatedMinutes?: number | null }) => Promise<void>;
   onCompleteMicroTask: (microTaskId: string) => Promise<void>;
+  onRefresh: () => Promise<void>; // For refreshing task data after AI operations
 }
 
 interface TaskFormValues {
@@ -36,8 +41,10 @@ export function TaskDetailPanel({
   onSave,
   onDelete,
   onAddMicroTask,
-  onCompleteMicroTask
+  onCompleteMicroTask,
+  onRefresh
 }: TaskDetailPanelProps) {
+  const [aiPanel, setAiPanel] = useState<"none" | "decompose" | "clarify" | "chat">("none");
   const {
     register,
     handleSubmit,
@@ -81,6 +88,26 @@ export function TaskDetailPanel({
     });
   }, [reset, resetMicroTask, task]);
 
+  const handleAcceptMicroTasks = async (microTasks: MicroTaskSuggestion[]) => {
+    for (const mt of microTasks) {
+      await onAddMicroTask({
+        title: mt.title,
+        estimatedMinutes: mt.estimatedMinutes
+      });
+    }
+    await onRefresh();
+    setAiPanel("none");
+  };
+
+  const handleAcceptGoalClarification = async (result: GoalClarificationResult) => {
+    await onSave({
+      title: result.smartGoal,
+      goodEnoughDefinition: result.doneLooksLike
+    });
+    await onRefresh();
+    setAiPanel("none");
+  };
+
   if (!task) {
     return null;
   }
@@ -111,14 +138,32 @@ export function TaskDetailPanel({
           });
         })}
       >
-        <input className="input" {...register("title", { required: true })} />
-        <textarea className="input min-h-24" placeholder="Description" {...register("description")} />
-        <div className="grid gap-4 md:grid-cols-2">
-          <input className="input" max={5} min={1} type="number" {...register("priority", { valueAsNumber: true })} />
-          <input className="input" min={5} step={5} type="number" {...register("estimatedMinutes", { valueAsNumber: true })} />
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-ink/70">Title</label>
+          <input className="input" {...register("title", { required: true })} />
         </div>
-        <input className="input" type="datetime-local" {...register("dueAt")} />
-        <textarea className="input min-h-24" placeholder="Good enough definition" {...register("goodEnoughDefinition")} />
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-ink/70">Description</label>
+          <textarea className="input min-h-24" placeholder="Description" {...register("description")} />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-ink/70">Priority (1-5)</label>
+            <input className="input" max={5} min={1} type="number" {...register("priority", { valueAsNumber: true })} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-ink/70">Estimated minutes</label>
+            <input className="input" min={5} step={5} type="number" {...register("estimatedMinutes", { valueAsNumber: true })} />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-ink/70">Due date</label>
+          <input className="input" type="datetime-local" {...register("dueAt")} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-ink/70">Good enough definition</label>
+          <textarea className="input min-h-24" placeholder="Good enough definition" {...register("goodEnoughDefinition")} />
+        </div>
         <div className="flex gap-3">
           <button className="button-primary" type="submit">
             Save changes
@@ -129,6 +174,64 @@ export function TaskDetailPanel({
           </button>
         </div>
       </form>
+
+      {/* AI Assistant Buttons */}
+      <section className="space-y-3">
+        <p className="text-sm uppercase tracking-[0.3em] text-moss">AI Assistant</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="button-secondary flex items-center gap-2"
+            onClick={() => setAiPanel("decompose")}
+            type="button"
+          >
+            <Sparkles size={16} />
+            Break Down with AI
+          </button>
+          <button
+            className="button-secondary flex items-center gap-2"
+            onClick={() => setAiPanel("clarify")}
+            type="button"
+          >
+            <Target size={16} />
+            Clarify Goal
+          </button>
+          <button
+            className="button-secondary flex items-center gap-2"
+            onClick={() => setAiPanel("chat")}
+            type="button"
+          >
+            <MessageSquare size={16} />
+            Coach Me
+          </button>
+        </div>
+      </section>
+
+      {/* AI Panels */}
+      {aiPanel === "decompose" && (
+        <TaskDecompositionPanel
+          taskId={task.id}
+          taskTitle={task.title}
+          taskDescription={task.description}
+          estimatedMinutes={task.estimatedMinutes}
+          onAccept={handleAcceptMicroTasks}
+          onCancel={() => setAiPanel("none")}
+        />
+      )}
+      {aiPanel === "clarify" && (
+        <GoalClarifierPanel
+          taskId={task.id}
+          taskTitle={task.title}
+          onAccept={handleAcceptGoalClarification}
+          onCancel={() => setAiPanel("none")}
+        />
+      )}
+      {aiPanel === "chat" && (
+        <CoachingChatPanel
+          taskId={task.id}
+          taskTitle={task.title}
+          onClose={() => setAiPanel("none")}
+        />
+      )}
 
       <section className="space-y-4">
         <div>

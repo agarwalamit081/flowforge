@@ -11,10 +11,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
+async-trait = "0.1.83"
 chrono = { version = "0.4.42", features = ["serde"] }
 keyring = { version = "3.6.3", features = ["windows-native", "sync-secret-service"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
+schemars = { version = "0.8.21", features = ["derive"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 tauri = { version = "2.8.5", features = ["tray-icon"] }
@@ -25,3 +27,4 @@ tauri-plugin-opener = "2.4.0"
 thiserror = "2.0.12"
 url = "2.5.7"
 uuid = { version = "1.18.0", features = ["serde", "v4"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_ProcessStatus"] }

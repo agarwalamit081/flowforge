@@ -320,6 +320,21 @@ impl Database {
         } else {
             None
         };
+
+        // Auto-end any active focus sessions when marking task as done
+        if matches!(status, TaskStatus::Done) {
+            let conn = self.conn();
+            // Find any active focus sessions for this task and end them
+            let mut stmt = conn.prepare("SELECT id FROM focus_sessions WHERE task_id = ?1 AND ended_at IS NULL")?;
+            let session_iter = stmt.query_map(params![id], |row| row.get::<_, String>(0))?;
+
+            for session_result in session_iter {
+                if let Ok(session_id) = session_result {
+                    let _ = self.end_focus_session(&session_id, "Task marked as done");
+                }
+            }
+        }
+
         let updated_at = now();
         self.conn().execute(
             "UPDATE tasks SET status = ?2, updated_at = ?3, completed_at = ?4 WHERE id = ?1",
@@ -450,10 +465,17 @@ impl Database {
     }
 
     pub fn start_focus_session(&self, task_id: &str, planned_minutes: i64) -> AppResult<FocusSession> {
+        // Calculate scheduled end time
+        let started_at = now();
+        let scheduled_end = chrono::DateTime::parse_from_rfc3339(&started_at)
+            .map_err(|e| AppError::Message(format!("Invalid datetime: {}", e)))?
+            .with_timezone(&chrono::Utc)
+            + chrono::Duration::minutes(planned_minutes);
+
         let session = FocusSession {
             id: Uuid::new_v4().to_string(),
             task_id: Some(task_id.to_string()),
-            started_at: now(),
+            started_at,
             ended_at: None,
             planned_minutes: Some(planned_minutes),
             actual_minutes: None,
@@ -465,6 +487,13 @@ impl Database {
              VALUES (?1, ?2, ?3, NULL, ?4, NULL, NULL, 0)",
             params![session.id, session.task_id, session.started_at, session.planned_minutes],
         )?;
+
+        // Update task status and scheduled end time
+        self.conn().execute(
+            "UPDATE tasks SET status = 'in_progress', scheduled_end_at = ?1, updated_at = ?2 WHERE id = ?3",
+            params![scheduled_end.to_rfc3339(), now(), task_id],
+        )?;
+
         Ok(session)
     }
 
@@ -905,6 +934,60 @@ impl Database {
         let now_value = now();
         let active_event = self.active_calendar_event(&now_value)?;
         let active_focus_block = self.active_focus_block(&now_value)?;
+
+        // Fetch the most recent activity segment to incorporate window tracking data
+        let recent_activity: Option<ActivitySegment> = self.conn().query_row(
+            "SELECT * FROM activity_segments ORDER BY started_at DESC LIMIT 1",
+            [],
+            map_activity_segment,
+        ).optional().ok().flatten();
+
+        // Use enhanced context evaluation if we have activity data
+        if let Some(activity) = recent_activity {
+            // Calculate idle time
+            let idle_time_seconds = if let Ok(activity_end) = chrono::DateTime::parse_from_rfc3339(&activity.ended_at) {
+                let now_dt = chrono::Utc::now();
+                let activity_end_utc = activity_end.with_timezone(&chrono::Utc);
+                (now_dt - activity_end_utc).num_seconds().max(0) as i64
+            } else {
+                0
+            };
+
+            let base_snapshot = services::derive_context_snapshot(
+                &now_value,
+                active_event.as_ref(),
+                active_focus_block.as_ref(),
+            );
+
+            // Evaluate context with tracking information
+            let evaluation = services::evaluate_context_with_tracking(
+                &base_snapshot,
+                activity.app_name.as_deref(),
+                activity.window_title_redacted.as_deref(),
+                idle_time_seconds,
+            );
+
+            // Update snapshot with evaluation results
+            return Ok(ContextSnapshot {
+                generated_at: base_snapshot.generated_at,
+                state: if evaluation.is_procrastinating {
+                    "procrastinating".to_string()
+                } else {
+                    base_snapshot.state
+                },
+                active_calendar_event_id: base_snapshot.active_calendar_event_id,
+                active_focus_block_id: base_snapshot.active_focus_block_id,
+                current_task_id: base_snapshot.current_task_id,
+                activity_summary: Some(format!(
+                    "{}. Currently: {}",
+                    base_snapshot.activity_summary.unwrap_or_default(),
+                    evaluation.actually_doing
+                )),
+                nudge: evaluation.suggested_nudge.or(base_snapshot.nudge),
+            });
+        }
+
+        // Fallback to basic snapshot without activity data
         Ok(services::derive_context_snapshot(
             &now_value,
             active_event.as_ref(),

@@ -196,3 +196,72 @@ export interface ExportBundle {
   focusSessions: FocusSession[];
   settings: AppSettings;
 }
+
+// =============================================
+// Phase 3: AI Task Decomposition & Intervention
+// =============================================
+
+export interface ChatMessage {
+  id: string;
+  taskId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+}
+
+export interface AiUsageStats {
+  requestCount: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostCents: number;
+  avgLatencyMs: number;
+}
+
+export interface MicroTaskSuggestion {
+  title: string;
+  description: string | null;
+  estimatedMinutes: number;
+  successCriteria: string | null;
+  frictionLevel: "low" | "medium" | "high";
+}
+
+export interface TaskDecompositionResult {
+  startHereHint: string;
+  goodEnoughDefinition: string;
+  microTasks: MicroTaskSuggestion[];
+  acceptedAt: string | null;
+}
+
+export interface GoalClarificationResult {
+  smartGoal: string;
+  doneLooksLike: string;
+  minimumViableOutcome: string;
+  firstMeasurableStep: string;
+  suggestedTimeboxMinutes: number;
+}
+
+export interface InterventionResult {
+  stuckReason: string;
+  tone: "compassionate" | "encouraging" | "analytical" | "direct";
+  message: string;
+  recommendedAction: string;
+  durationMinutes: number;
+  followUpQuestion: string | null;
+}
+
+export interface SuggestedAction {
+  label: string;
+  actionType: string;
+}
+
+export interface ChatResponse {
+  response: string;
+  suggestedActions: SuggestedAction[];
+  moodAssessment: string | null;
+}
+
+export interface AiProviderConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+}

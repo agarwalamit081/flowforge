@@ -107,7 +107,8 @@ export function DashboardPage() {
                 onOpen={(selectedTask) => selectTask(selectedTask.id)}
                 onStart={async (selectedTask) => {
                   await api.startFocusSession(selectedTask.id, selectedTask.estimatedMinutes ?? 25);
-                  await setTaskStatus(selectedTask.id, "in_progress", date);
+                  // Note: startFocusSession now updates task status to in_progress automatically
+                  await loadDashboard(date);
                 }}
                 onMarkDone={(selectedTask) => setTaskStatus(selectedTask.id, "done", date)}
                 onStuck={async (selectedTask, reason) => {
@@ -135,6 +136,11 @@ export function DashboardPage() {
           onDelete={() => deleteTask(activeTask!.id, date)}
           onAddMicroTask={(input) => createMicroTask(activeTask!.id, input)}
           onCompleteMicroTask={(microTaskId) => completeMicroTask(activeTask!.id, microTaskId)}
+          onRefresh={async () => {
+            if (activeTask) {
+              await selectTask(activeTask.id);
+            }
+          }}
         />
       </div>
     </div>

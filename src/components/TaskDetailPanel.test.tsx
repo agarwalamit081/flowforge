@@ -41,6 +41,7 @@ describe("TaskDetailPanel", () => {
         onDelete={vi.fn().mockResolvedValue(undefined)}
         onAddMicroTask={vi.fn().mockResolvedValue(undefined)}
         onCompleteMicroTask={vi.fn().mockResolvedValue(undefined)}
+        onRefresh={vi.fn().mockResolvedValue(undefined)}
       />
     );
 
@@ -68,6 +69,7 @@ describe("TaskDetailPanel", () => {
         onDelete={vi.fn().mockResolvedValue(undefined)}
         onAddMicroTask={onAddMicroTask}
         onCompleteMicroTask={vi.fn().mockResolvedValue(undefined)}
+        onRefresh={vi.fn().mockResolvedValue(undefined)}
       />
     );
 

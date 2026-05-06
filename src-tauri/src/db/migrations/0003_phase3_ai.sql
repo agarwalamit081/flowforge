@@ -13,7 +13,7 @@
 -- AI Request Log (transparency)
 -- =============================================
 -- Tracks all AI API calls for cost tracking, debugging, and privacy
-CREATE TABLE ai_requests (
+CREATE TABLE IF NOT EXISTS ai_requests (
   id                    TEXT PRIMARY KEY,    -- UUID v4
   provider              TEXT NOT NULL,       -- 'openai', 'anthropic', 'deepseek', etc.
   model                 TEXT NOT NULL,       -- 'gpt-4.1-mini', 'claude-haiku-4.5', etc.
@@ -30,15 +30,15 @@ CREATE TABLE ai_requests (
   created_at            TEXT NOT NULL
 );
 
-CREATE INDEX idx_ai_requests_task ON ai_requests(task_id);
-CREATE INDEX idx_ai_requests_time ON ai_requests(created_at DESC);
-CREATE INDEX idx_ai_requests_status ON ai_requests(status);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_task ON ai_requests(task_id);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_time ON ai_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_requests_status ON ai_requests(status);
 
 -- =============================================
 -- AI Outputs (validated results)
 -- =============================================
 -- Stores validated JSON responses from AI providers
-CREATE TABLE ai_outputs (
+CREATE TABLE IF NOT EXISTS ai_outputs (
   id                TEXT PRIMARY KEY,       -- UUID v4
   ai_request_id     TEXT NOT NULL REFERENCES ai_requests(id) ON DELETE CASCADE,
   output_type       TEXT NOT NULL CHECK(output_type IN ('task_decomposition', 'smart_goal', 'intervention', 'roadmap', 'chat_response')),
@@ -48,15 +48,15 @@ CREATE TABLE ai_outputs (
   created_at        TEXT NOT NULL
 );
 
-CREATE INDEX idx_ai_outputs_request ON ai_outputs(ai_request_id);
-CREATE INDEX idx_ai_outputs_accepted ON ai_outputs(accepted_by_user);
-CREATE INDEX idx_ai_outputs_type ON ai_outputs(output_type);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_request ON ai_outputs(ai_request_id);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_accepted ON ai_outputs(accepted_by_user);
+CREATE INDEX IF NOT EXISTS idx_ai_outputs_type ON ai_outputs(output_type);
 
 -- =============================================
 -- Intervention Events (audit trail)
 -- =============================================
 -- Tracks when and why interventions were triggered
-CREATE TABLE intervention_events (
+CREATE TABLE IF NOT EXISTS intervention_events (
   id                    TEXT PRIMARY KEY,    -- UUID v4
   trigger_type          TEXT NOT NULL CHECK(trigger_type IN ('drift', 'stuck', 'idle', 'overdue', 'manual')),
   task_id               TEXT REFERENCES tasks(id) ON DELETE SET NULL,
@@ -68,15 +68,15 @@ CREATE TABLE intervention_events (
   created_at            TEXT NOT NULL
 );
 
-CREATE INDEX idx_interventions_task ON intervention_events(task_id);
-CREATE INDEX idx_interventions_time ON intervention_events(created_at DESC);
-CREATE INDEX idx_interventions_source ON intervention_events(intervention_source);
+CREATE INDEX IF NOT EXISTS idx_interventions_task ON intervention_events(task_id);
+CREATE INDEX IF NOT EXISTS idx_interventions_time ON intervention_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_interventions_source ON intervention_events(intervention_source);
 
 -- =============================================
 -- Chat Messages (coaching history)
 -- =============================================
 -- Stores Socratic coaching chat conversations
-CREATE TABLE chat_messages (
+CREATE TABLE IF NOT EXISTS chat_messages (
   id          TEXT PRIMARY KEY,         -- UUID v4
   task_id     TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   role        TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
@@ -84,14 +84,14 @@ CREATE TABLE chat_messages (
   created_at  TEXT NOT NULL
 );
 
-CREATE INDEX idx_chat_task ON chat_messages(task_id);
-CREATE INDEX idx_chat_time ON chat_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_task ON chat_messages(task_id);
+CREATE INDEX IF NOT EXISTS idx_chat_time ON chat_messages(created_at DESC);
 
 -- =============================================
 -- Task Templates (recurring workflows)
 -- =============================================
 -- Pre-built templates for common task patterns
-CREATE TABLE task_templates (
+CREATE TABLE IF NOT EXISTS task_templates (
   id               TEXT PRIMARY KEY,      -- UUID v4
   name             TEXT NOT NULL,          -- "Weekly Report", "Email Triage"
   description      TEXT,
@@ -101,27 +101,27 @@ CREATE TABLE task_templates (
   updated_at       TEXT NOT NULL
 );
 
-CREATE INDEX idx_templates_category ON task_templates(category);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON task_templates(category);
 
 -- =============================================
 -- Enhance existing tables for Phase 3
 -- =============================================
 
--- Add AI tracking to micro_tasks
-ALTER TABLE micro_tasks ADD COLUMN ai_generated INTEGER DEFAULT 0;           -- BOOLEAN: 1 if AI-suggested
-ALTER TABLE micro_tasks ADD COLUMN source_ai_request_id TEXT REFERENCES ai_requests(id) ON DELETE SET NULL;
-ALTER TABLE micro_tasks ADD COLUMN accepted_at TEXT;                           -- When user accepted AI suggestion
+-- Add AI tracking to micro_tasks (SQLite 3.35.0+ supports IF NOT EXISTS)
+ALTER TABLE micro_tasks ADD COLUMN IF NOT EXISTS ai_generated INTEGER DEFAULT 0;           -- BOOLEAN: 1 if AI-suggested
+ALTER TABLE micro_tasks ADD COLUMN IF NOT EXISTS source_ai_request_id TEXT REFERENCES ai_requests(id) ON DELETE SET NULL;
+ALTER TABLE micro_tasks ADD COLUMN IF NOT EXISTS accepted_at TEXT;                           -- When user accepted AI suggestion
 
 -- Add AI enhancement tracking to tasks
-ALTER TABLE tasks ADD COLUMN last_decomposed_at TEXT;                          -- Last time AI broke down this task
-ALTER TABLE tasks ADD COLUMN clarified_at TEXT;                                -- Last time AI clarified goal
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_decomposed_at TEXT;                          -- Last time AI broke down this task
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS clarified_at TEXT;                          -- Last time AI clarified goal
 
 -- =============================================
 -- Views for common queries
 -- =============================================
 
 -- AI usage statistics summary
-CREATE VIEW ai_usage_summary AS
+CREATE OR REPLACE VIEW ai_usage_summary AS
 SELECT
   provider,
   model,
@@ -135,7 +135,7 @@ WHERE status = 'success'
 GROUP BY provider, model;
 
 -- Pending AI suggestions (not yet accepted by user)
-CREATE VIEW pending_ai_suggestions AS
+CREATE OR REPLACE VIEW pending_ai_suggestions AS
 SELECT
   ao.id,
   ao.output_type,

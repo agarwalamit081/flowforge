@@ -69,6 +69,7 @@ export function TaskComposer({ onCreate }: TaskComposerProps) {
           min={5}
           step={5}
           type="number"
+          placeholder="Est. minutes"
           {...register("estimatedMinutes", { valueAsNumber: true })}
           disabled={isSubmitting}
         />
@@ -87,7 +88,7 @@ export function TaskComposer({ onCreate }: TaskComposerProps) {
         <>
           <textarea className="input min-h-24" placeholder="Description" {...register("description")} disabled={isSubmitting} />
           <div className="grid gap-4 md:grid-cols-2">
-            <input className="input" max={5} min={1} type="number" {...register("priority", { valueAsNumber: true })} disabled={isSubmitting} />
+            <input className="input" max={5} min={1} type="number" placeholder="Priority (1-5)" {...register("priority", { valueAsNumber: true })} disabled={isSubmitting} />
             <input className="input" type="datetime-local" {...register("dueAt")} disabled={isSubmitting} />
           </div>
         </>

@@ -2,19 +2,25 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
   ActivitySegment,
+  AiUsageStats,
   CalendarAccount,
   CalendarEvent,
+  ChatMessage,
+  ChatResponse,
   ContextSnapshot,
   DailyOutcome,
   ExportBundle,
   FocusBlock,
   FocusSlotSuggestion,
   FocusSession,
+  GoalClarificationResult,
+  InterventionResult,
   InterventionSuggestion,
   MorningBriefing,
   MonitoringRule,
   Project,
   Task,
+  TaskDecompositionResult,
   TaskStatus,
   TodayAgenda
 } from "../types/domain";
@@ -108,6 +114,39 @@ export interface TaskFilter {
   tag?: string | null;
 }
 
+// =============================================
+// Phase 3: AI Task Decomposition & Intervention
+// =============================================
+
+export interface TaskDecompositionRequest {
+  taskId: string;
+}
+
+export interface GoalClarificationRequest {
+  taskId: string;
+}
+
+export interface InterventionRequest {
+  taskId: string;
+  reason: string;
+}
+
+export interface ChatMessageRequest {
+  taskId: string;
+  message: string;
+}
+
+export interface AiUsageStatsRequest {
+  start: string;
+  end: string;
+}
+
+export interface AiProviderConfig {
+  provider: string;
+  model: string;
+  apiKey: string;
+}
+
 export const api = {
   listTodayAgenda: (date: string) => invoke<TodayAgenda>("list_today_agenda", { date }),
   runMorningBriefing: (date: string) => invoke<MorningBriefing>("run_morning_briefing", { date }),
@@ -156,5 +195,20 @@ export const api = {
   deleteMonitoringRule: (id: string) => invoke("delete_monitoring_rule", { id }),
   getActivityLog: (range: CalendarRangeRequest) =>
     invoke<ActivitySegment[]>("get_activity_log", { range }),
-  getContextSnapshot: () => invoke<ContextSnapshot>("get_context_snapshot")
+  getContextSnapshot: () => invoke<ContextSnapshot>("get_context_snapshot"),
+
+  // Phase 3: AI Task Decomposition & Intervention
+  decomposeTask: (input: TaskDecompositionRequest) =>
+    invoke<TaskDecompositionResult>("decompose_task", { input }),
+  clarifyGoal: (input: GoalClarificationRequest) =>
+    invoke<GoalClarificationResult>("clarify_goal", { input }),
+  getStuckIntervention: (input: InterventionRequest) =>
+    invoke<InterventionResult>("get_stuck_intervention", { input }),
+  sendChatMessage: (input: ChatMessageRequest) =>
+    invoke<ChatResponse>("send_chat_message", { input }),
+  getAiUsageStats: (input: AiUsageStatsRequest) =>
+    invoke<AiUsageStats>("get_ai_usage_stats", { input }),
+  deleteAiData: () => invoke("delete_ai_data"),
+  testAiConnection: (input: AiProviderConfig) =>
+    invoke<boolean>("test_ai_connection", { input })
 };
