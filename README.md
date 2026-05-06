@@ -345,6 +345,16 @@ This architecture ensures FlowForge is a "quiet observer" that is lightning-fast
 
 ---
 
+## Run the application
+On Windows, create C:\dev\flowforge. Use Powershell and run the below commands to launch the application.
+cd C:\dev\flowforge
+npm install
+npm run tauri dev
+npm run tauri:dev
+npm run tauri:build
+
+---
+
 ## Differentiation: Why FlowForge Stands Out
 
 1.  **Root-Cause Focus**: Unlike generic to-do apps, FlowForge diagnoses *why* you're stuck and applies targeted behavioral interventions.
