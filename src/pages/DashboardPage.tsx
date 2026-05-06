@@ -1,8 +1,10 @@
 import { useEffect } from "react";
+import { CheckCircle2, Calendar, Inbox } from "lucide-react";
 import { TaskComposer } from "../components/TaskComposer";
 import { OutcomeComposer } from "../components/OutcomeComposer";
 import { TaskCard } from "../components/TaskCard";
 import { TaskDetailPanel } from "../components/TaskDetailPanel";
+import { EmptyState } from "../components/EmptyState";
 import { api } from "../lib/tauri";
 import { useFlowForgeStore } from "../stores/useFlowForgeStore";
 
@@ -84,7 +86,16 @@ export function DashboardPage() {
                   {outcome.title}
                 </li>
               ))}
-              {!agenda?.outcomes.length && <li className="text-sm text-ink/60">No daily outcomes yet.</li>}
+              {!agenda?.outcomes.length && (
+                <li>
+                  <EmptyState
+                    icon={CheckCircle2}
+                    title="No daily outcomes yet"
+                    description="Define 1-3 meaningful outcomes to guide your day's focus."
+                    variant="outcomes"
+                  />
+                </li>
+              )}
             </ul>
           </section>
 
@@ -105,7 +116,14 @@ export function DashboardPage() {
                 }}
               />
             ))}
-            {!agenda?.tasks.length && <div className="card text-sm text-ink/60">No tasks scheduled for today yet.</div>}
+            {!agenda?.tasks.length && (
+              <EmptyState
+                icon={Inbox}
+                title="No tasks for today"
+                description="Use the quick capture form to add tasks to your inbox."
+                variant="tasks"
+              />
+            )}
           </section>
         </div>
         <TaskDetailPanel

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Loader2, Check } from "lucide-react";
+import { useToast } from "../contexts/ToastContext";
 
 interface TaskComposerProps {
   onCreate: (input: {
@@ -23,7 +24,7 @@ interface TaskComposerValues {
 export function TaskComposer({ onCreate }: TaskComposerProps) {
   const [advanced, setAdvanced] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const { showSuccess, showError } = useToast();
   const { register, handleSubmit, reset } = useForm<TaskComposerValues>({
     defaultValues: { title: "", description: "", priority: 3, dueAt: "", estimatedMinutes: 25 }
   });
@@ -42,8 +43,9 @@ export function TaskComposer({ onCreate }: TaskComposerProps) {
             estimatedMinutes: values.estimatedMinutes
           });
           reset();
-          setShowSuccess(true);
-          setTimeout(() => setShowSuccess(false), 2000);
+          showSuccess("Task added successfully");
+        } catch (error) {
+          showError(error instanceof Error ? error.message : "Failed to add task");
         } finally {
           setIsSubmitting(false);
         }
@@ -75,11 +77,6 @@ export function TaskComposer({ onCreate }: TaskComposerProps) {
             <>
               <Loader2 size={16} className="animate-spin" />
               Adding...
-            </>
-          ) : showSuccess ? (
-            <>
-              <Check size={16} />
-              Added!
             </>
           ) : (
             "Add task"

@@ -3,6 +3,8 @@ mod db;
 mod models;
 mod services;
 
+use services::{CalendarSyncService, WindowTracker};
+
 use std::fs;
 
 use commands::*;
@@ -90,6 +92,15 @@ pub fn run() {
                     let _ = app_handle.emit("context-update", snapshot);
                 }
             });
+
+            // Start calendar sync background service (syncs every 5 minutes)
+            let sync_service = CalendarSyncService::new(app.handle().clone(), std::time::Duration::from_secs(300));
+            sync_service.start_periodic_sync();
+
+            // Start window tracking service (polls every 5 seconds)
+            let window_tracker = WindowTracker::new(app.handle().clone(), std::time::Duration::from_secs(5));
+            window_tracker.start_tracking();
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

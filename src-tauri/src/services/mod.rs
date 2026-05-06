@@ -1,5 +1,12 @@
+mod calendar_sync;
+mod window_tracker;
+
+pub use calendar_sync::CalendarSyncService;
+pub use window_tracker::WindowTracker;
+
 use std::time::Duration;
 
+use chrono::Timelike;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -430,29 +437,70 @@ pub fn derive_context_snapshot(
     active_focus_block: Option<&FocusBlock>,
 ) -> ContextSnapshot {
     let generated_at = now.to_string();
+
+    // Priority 1: Active focus block
     if let Some(focus_block) = active_focus_block {
+        let time_remaining = calculate_time_remaining(&focus_block.ends_at, now);
+        let (nudge, summary) = if time_remaining < 5 {
+            (
+                Some("Almost there! Consider extending or wrapping up this focus block.".to_string()),
+                format!("Focused on {} - {} minutes remaining", focus_block.title, time_remaining),
+            )
+        } else {
+            (
+                Some("Stay with the current block until the planned end time.".to_string()),
+                format!("Focused on {} - {} minutes remaining", focus_block.title, time_remaining),
+            )
+        };
+
         return ContextSnapshot {
             generated_at,
             state: "focus_block_active".to_string(),
             active_calendar_event_id: active_event.map(|event| event.id.clone()),
             active_focus_block_id: Some(focus_block.id.clone()),
             current_task_id: focus_block.task_id.clone(),
-            activity_summary: Some(format!("Focused on {}", focus_block.title)),
-            nudge: Some("Stay with the current block until the planned end time.".to_string()),
+            activity_summary: Some(summary),
+            nudge,
         };
     }
 
+    // Priority 2: In meeting
     if let Some(event) = active_event {
+        let time_until_end = calculate_time_remaining(&event.ends_at, now);
+        let summary = if time_until_end > 0 {
+            format!("In meeting: {} - {} minutes remaining", event.title, time_until_end)
+        } else {
+            format!("Meeting wrapping up: {}", event.title)
+        };
+
         return ContextSnapshot {
             generated_at,
             state: "in_meeting".to_string(),
             active_calendar_event_id: Some(event.id.clone()),
             active_focus_block_id: None,
             current_task_id: None,
-            activity_summary: Some(format!("Calendar says you are busy with {}", event.title)),
+            activity_summary: Some(summary),
             nudge: None,
         };
     }
+
+    // Priority 3: Unplanned time
+    let current_hour = if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(now) {
+        dt.hour()
+    } else {
+        12
+    };
+    let (time_context, nudge) = if current_hour >= 9 && current_hour < 12 {
+        ("morning focus time", Some("Prime focus hours. Consider starting your most important task.".to_string()))
+    } else if current_hour >= 12 && current_hour < 14 {
+        ("lunch hours", Some("Good time for a break or quick administrative tasks.".to_string()))
+    } else if current_hour >= 14 && current_hour < 17 {
+        ("afternoon work block", Some("Afternoon energy window. Plan focused work or catch up on emails.".to_string()))
+    } else if current_hour >= 17 && current_hour < 20 {
+        ("evening wind-down", Some("Consider wrapping up tasks or planning for tomorrow.".to_string()))
+    } else {
+        ("off hours", Some("Outside typical work hours. Rest or plan for tomorrow.".to_string()))
+    };
 
     ContextSnapshot {
         generated_at,
@@ -460,9 +508,116 @@ pub fn derive_context_snapshot(
         active_calendar_event_id: None,
         active_focus_block_id: None,
         current_task_id: None,
-        activity_summary: Some("No active meeting or focus block detected.".to_string()),
-        nudge: Some("Use Agenda to plan a focus block before switching contexts.".to_string()),
+        activity_summary: Some(format!("No active meeting or focus block. {}.", time_context)),
+        nudge,
     }
+}
+
+fn calculate_time_remaining(ends_at: &str, now: &str) -> i64 {
+    if let (Ok(end), Ok(current)) = (
+        chrono::DateTime::parse_from_rfc3339(ends_at),
+        chrono::DateTime::parse_from_rfc3339(now),
+    ) {
+        let remaining = end.signed_duration_since(current);
+        remaining.num_minutes().max(0)
+    } else {
+        0
+    }
+}
+
+/// Advanced context evaluation with window tracking information
+/// This should be called when active window/app tracking is available
+pub fn evaluate_context_with_tracking(
+    snapshot: &ContextSnapshot,
+    active_window_app: Option<&str>,
+    _active_window_title: Option<&str>,
+    idle_time_seconds: i64,
+) -> ContextEvaluation {
+    let should_be_doing = match snapshot.state.as_str() {
+        "focus_block_active" => {
+            if snapshot.current_task_id.is_some() {
+                "working on your focus block task"
+            } else {
+                "in a focus block"
+            }
+        }
+        "in_meeting" => "in a meeting",
+        "unplanned_time" => "planning or choosing what to work on",
+        _ => "working",
+    };
+
+    let actually_doing = if idle_time_seconds > 300 {
+        "idle (no activity for 5+ minutes)"
+    } else if let Some(app) = active_window_app {
+        match app {
+            "chrome" | "firefox" | "edge" => "browsing the web",
+            "slack" | "discord" | "teams" => "messaging/chatting",
+            "code" | "vscode" => "coding",
+            "word" | "excel" | "powerpoint" => "working on documents",
+            _ => &format!("using {}", app),
+        }
+    } else {
+        "working on something"
+    };
+
+    let is_procrastinating = should_match_intent(should_be_doing, actually_doing);
+    let intervention_nudge = if is_procrastinating {
+        Some(generate_intervention_nudge(should_be_doing, actually_doing))
+    } else {
+        snapshot.nudge.clone()
+    };
+
+    ContextEvaluation {
+        should_be_doing: should_be_doing.to_string(),
+        actually_doing: actually_doing.to_string(),
+        is_procrastinating,
+        suggested_nudge: intervention_nudge,
+        confidence_level: calculate_confidence(snapshot, idle_time_seconds),
+    }
+}
+
+fn should_match_intent(should_be: &str, actually: &str) -> bool {
+    // Simple heuristic: if we're in focus block and browsing social/chat apps
+    let should_working = should_be.contains("working") || should_be.contains("focus");
+    let actually_distracted = actually.contains("browsing") || actually.contains("chatting") || actually.contains("idle");
+
+    should_working && actually_distracted
+}
+
+fn generate_intervention_nudge(should_be: &str, actually: &str) -> String {
+    format!(
+        "You're meant to be {}, but you're {}. Consider returning to your intended focus.",
+        should_be, actually
+    )
+}
+
+fn calculate_confidence(snapshot: &ContextSnapshot, idle_time_seconds: i64) -> f64 {
+    let mut confidence: f64 = 0.5;
+
+    // Higher confidence if we have clear state
+    if snapshot.state == "focus_block_active" {
+        confidence += 0.3;
+    }
+
+    // Higher confidence if not idle
+    if idle_time_seconds < 60 {
+        confidence += 0.2;
+    }
+
+    // Lower confidence in unplanned time
+    if snapshot.state == "unplanned_time" {
+        confidence -= 0.2;
+    }
+
+    confidence.min(1.0).max(0.0)
+}
+
+pub struct ContextEvaluation {
+    pub should_be_doing: String,
+    pub actually_doing: String,
+    pub is_procrastinating: bool,
+    pub suggested_nudge: Option<String>,
+    pub confidence_level: f64,
 }
 
 fn fetch_google_calendar_events_with_access_token(access_token: &str) -> Result<Vec<FetchedCalendarEvent>, String> {

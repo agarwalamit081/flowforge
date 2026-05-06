@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { cancel, onUrl, start } from "@fabianlars/tauri-plugin-oauth";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CalendarClock, Link2, Shield, Sparkles, TimerReset } from "lucide-react";
+import { CalendarClock, Link2, Shield, Sparkles, TimerReset, Eye, Loader2, AlertCircle } from "lucide-react";
 import { useFlowForgeStore } from "../stores/useFlowForgeStore";
+import { EmptyState } from "../components/EmptyState";
 import type { ContextSnapshot } from "../types/domain";
 
 function todayRange() {
@@ -45,6 +46,8 @@ export function ContextPage() {
     activityLog,
     contextSnapshot,
     focusSuggestions,
+    error,
+    loading,
     loadTasks,
     loadContextWorkspace,
     connectGoogleCalendar,
@@ -61,6 +64,9 @@ export function ContextPage() {
   const [rulePattern, setRulePattern] = useState("");
   const [ruleType, setRuleType] = useState("domain");
   const [ruleAction, setRuleAction] = useState<"allow" | "redact_title" | "deny">("redact_title");
+  const [connecting, setConnecting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
 
   useEffect(() => {
     void Promise.all([loadTasks(), loadContextWorkspace(date)]);
@@ -83,37 +89,44 @@ export function ContextPage() {
   async function handleCalendarConnect() {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     if (!clientId) {
-      throw new Error("VITE_GOOGLE_CLIENT_ID is not configured.");
+      alert("Google Calendar is not configured. Please set VITE_GOOGLE_CLIENT_ID in your .env file.");
+      return;
     }
-    const verifier = randomVerifier();
-    const challenge = await createPkceChallenge(verifier);
-    const port = await start();
-    const redirectUri = `http://127.0.0.1:${port}`;
-    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", "openid email profile https://www.googleapis.com/auth/calendar.readonly");
-    authUrl.searchParams.set("access_type", "offline");
-    authUrl.searchParams.set("prompt", "consent");
-    authUrl.searchParams.set("code_challenge", challenge);
-    authUrl.searchParams.set("code_challenge_method", "S256");
+    setConnecting(true);
+    try {
+      const verifier = randomVerifier();
+      const challenge = await createPkceChallenge(verifier);
+      const port = await start();
+      const redirectUri = `http://127.0.0.1:${port}`;
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", "openid email profile https://www.googleapis.com/auth/calendar.readonly");
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+      authUrl.searchParams.set("code_challenge", challenge);
+      authUrl.searchParams.set("code_challenge_method", "S256");
 
-    const unlisten = await onUrl(async (receivedUrl) => {
-      try {
-        const parsed = new URL(receivedUrl);
-        const authorizationCode = parsed.searchParams.get("code");
-        if (!authorizationCode) {
-          throw new Error("Google redirect did not include an authorization code.");
+      const unlisten = await onUrl(async (receivedUrl) => {
+        try {
+          const parsed = new URL(receivedUrl);
+          const authorizationCode = parsed.searchParams.get("code");
+          if (!authorizationCode) {
+            throw new Error("Google redirect did not include an authorization code.");
+          }
+          await connectGoogleCalendar({ authorizationCode, redirectUri, codeVerifier: verifier }, date);
+        } finally {
+          await cancel(port);
+          unlisten();
+          setConnecting(false);
         }
-        await connectGoogleCalendar({ authorizationCode, redirectUri, codeVerifier: verifier }, date);
-      } finally {
-        await cancel(port);
-        unlisten();
-      }
-    });
+      });
 
-    await openUrl(authUrl.toString());
+      await openUrl(authUrl.toString());
+    } catch {
+      setConnecting(false);
+    }
   }
 
   return (
@@ -126,6 +139,16 @@ export function ContextPage() {
         </p>
       </section>
 
+      {error && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <AlertCircle className="mt-0.5 size-5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Something went wrong</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="card space-y-5">
           <div className="flex items-start justify-between gap-4">
@@ -133,9 +156,14 @@ export function ContextPage() {
               <p className="text-sm uppercase tracking-[0.3em] text-moss">Calendar</p>
               <h3 className="mt-2 text-2xl font-semibold">Google account and today&apos;s events</h3>
             </div>
-            <button className="button-secondary" onClick={() => void handleCalendarConnect()} type="button">
-              <Link2 className="mr-2" size={16} />
-              Connect Google
+            <button
+              className="button-secondary flex items-center gap-2"
+              disabled={connecting}
+              onClick={handleCalendarConnect}
+              type="button"
+            >
+              {connecting ? <Loader2 className="animate-spin" size={16} /> : <Link2 size={16} />}
+              {connecting ? "Connecting..." : "Connect Google"}
             </button>
           </div>
           {!!calendarAccounts.length && (
@@ -191,8 +219,20 @@ export function ContextPage() {
             </div>
             <p className="text-sm text-ink/70">{contextSnapshot?.activitySummary ?? "No snapshot yet."}</p>
             {contextSnapshot?.nudge && <div className="rounded-2xl bg-leaf/20 px-4 py-3 text-sm">{contextSnapshot.nudge}</div>}
-            <button className="button-secondary" onClick={() => void refreshContextSnapshot()} type="button">
-              <TimerReset className="mr-2" size={16} />
+            <button
+              className="button-secondary flex items-center gap-2"
+              disabled={refreshing || loading}
+              onClick={async () => {
+                setRefreshing(true);
+                try {
+                  await refreshContextSnapshot();
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+              type="button"
+            >
+              {refreshing || loading ? <Loader2 className="animate-spin" size={16} /> : <TimerReset size={16} />}
               Refresh snapshot
             </button>
           </div>
@@ -221,11 +261,19 @@ export function ContextPage() {
               value={minutes}
             />
             <button
-              className="button-primary"
-              disabled={!selectedTaskId}
-              onClick={() => void suggestFocusSlots({ taskId: selectedTaskId, start: rangeStart, end: rangeEnd, preferredMinutes: minutes })}
+              className="button-primary flex items-center gap-2"
+              disabled={!selectedTaskId || suggesting || loading}
+              onClick={async () => {
+                setSuggesting(true);
+                try {
+                  await suggestFocusSlots({ taskId: selectedTaskId, start: rangeStart, end: rangeEnd, preferredMinutes: minutes });
+                } finally {
+                  setSuggesting(false);
+                }
+              }}
               type="button"
             >
+              {suggesting || loading ? <Loader2 className="animate-spin" size={16} /> : null}
               Find focus slots
             </button>
             <div className="space-y-3">
@@ -379,18 +427,67 @@ export function ContextPage() {
       </div>
 
       <section className="card">
-        <p className="text-sm uppercase tracking-[0.3em] text-moss">Activity log</p>
-        <h3 className="mt-2 text-2xl font-semibold">Stubbed until native tracker lands</h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-moss">Activity log</p>
+            <h3 className="mt-2 text-2xl font-semibold">Window and app tracking</h3>
+          </div>
+          {activityLog.length > 0 && (
+            <div className="text-sm text-ink/60">
+              {activityLog.length} segments tracked
+            </div>
+          )}
+        </div>
         <div className="mt-4 space-y-3">
-          {activityLog.map((segment) => (
-            <div key={segment.id} className="rounded-2xl border border-ink/10 px-4 py-3 text-sm">
-              {segment.appName ?? segment.processName ?? "Unknown app"} · {segment.privacyState}
-            </div>
-          ))}
+          {activityLog.map((segment) => {
+            const isDenied = segment.privacyState === "denied";
+            const isRedacted = segment.privacyState === "redacted_title";
+            const isAllowed = segment.privacyState === "allowed";
+
+            return (
+              <div
+                key={segment.id}
+                className={`rounded-2xl border px-4 py-3 text-sm ${
+                  isDenied ? "border-coral/30 bg-coral/10" : "border-ink/10"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">
+                        {segment.appName ?? segment.processName ?? "Unknown app"}
+                      </span>
+                      {isDenied && (
+                        <span className="rounded-full bg-coral/20 px-2 py-0.5 text-xs text-coral">Blocked</span>
+                      )}
+                      {isRedacted && (
+                        <span className="rounded-full bg-moss/20 px-2 py-0.5 text-xs text-moss">Redacted</span>
+                      )}
+                      {isAllowed && (
+                        <span className="rounded-full bg-leaf/20 px-2 py-0.5 text-xs text-leaf">Allowed</span>
+                      )}
+                    </div>
+                    {segment.windowTitleRedacted && (
+                      <div className="mt-1 text-xs text-ink/60">{segment.windowTitleRedacted}</div>
+                    )}
+                    {segment.domain && (
+                      <div className="mt-1 text-xs text-ink/60">🌐 {segment.domain}</div>
+                    )}
+                    <div className="mt-2 text-xs text-ink/50">
+                      {formatDateTime(segment.startedAt)} → {formatDateTime(segment.endedAt)} · {segment.durationSeconds}s
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
           {!activityLog.length && (
-            <div className="rounded-2xl bg-leaf/20 px-4 py-3 text-sm text-ink/70">
-              Native active-window tracking is intentionally still stubbed in this slice. Privacy rules and empty-state plumbing are live.
-            </div>
+            <EmptyState
+              icon={Eye}
+              title="Activity tracking ready"
+              description="Active window tracking is configured. Privacy rules are in place to protect sensitive apps and domains."
+              variant="default"
+            />
           )}
         </div>
       </section>

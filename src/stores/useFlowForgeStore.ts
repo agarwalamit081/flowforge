@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { api, type CreateDailyOutcomeRequest, type CreateProjectRequest, type CreateTaskRequest } from "../lib/tauri";
+import { useToast } from "../contexts/ToastContext";
 import type {
   ActivitySegment,
   AppSettings,
@@ -205,6 +206,8 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
       await api.createTask(input);
       const [agenda, tasks] = await Promise.all([api.listTodayAgenda(date), api.listTasks()]);
       set({ agenda, tasks });
+      // Show success toast (will be used by component)
+      return true;
     }, set);
   },
   createProject: async (input) => {

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use rusqlite::{params, Connection, MappedRows, OptionalExtension, Row};
 use serde_json::json;
 use thiserror::Error;
@@ -675,6 +675,45 @@ impl Database {
         collect_rows(rows)
     }
 
+    pub fn upsert_calendar_event(&self, event: CalendarEvent) -> AppResult<()> {
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO calendar_events (id, provider_event_id, account_id, title, starts_at, ends_at, busy_status, location, meeting_url, source_updated_at, local_updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
+             ON CONFLICT(provider_event_id) DO UPDATE SET
+                title = excluded.title,
+                starts_at = excluded.starts_at,
+                ends_at = excluded.ends_at,
+                busy_status = excluded.busy_status,
+                location = excluded.location,
+                meeting_url = excluded.meeting_url,
+                source_updated_at = excluded.source_updated_at,
+                local_updated_at = excluded.local_updated_at",
+            params![
+                event.id,
+                event.provider_event_id,
+                event.account_id,
+                event.title,
+                event.starts_at,
+                event.ends_at,
+                event.busy_status,
+                event.location,
+                event.meeting_url,
+                event.source_updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_calendar_last_sync(&self, account_id: String) -> AppResult<()> {
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE calendar_accounts SET last_synced_at = datetime('now'), updated_at = datetime('now') WHERE id = ?1",
+            params![account_id],
+        )?;
+        Ok(())
+    }
+
     pub fn suggest_focus_slots(&self, input: FocusSlotSuggestionRequest) -> AppResult<Vec<FocusSlotSuggestion>> {
         let tasks = self.list_tasks(None)?;
         let preferred_minutes = input
@@ -836,6 +875,27 @@ impl Database {
         )?;
         let rows = statement.query_map(params![start, end], map_activity_segment)?;
         collect_rows(rows)
+    }
+
+    pub fn record_activity_segment(&self, segment: ActivitySegment) -> AppResult<()> {
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO activity_segments (id, app_name, process_name, window_title_redacted, domain, started_at, ended_at, duration_seconds, privacy_state, linked_focus_session_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                segment.id,
+                segment.app_name,
+                segment.process_name,
+                segment.window_title_redacted,
+                segment.domain,
+                segment.started_at,
+                segment.ended_at,
+                segment.duration_seconds,
+                segment.privacy_state,
+                segment.linked_focus_session_id,
+            ],
+        )?;
+        Ok(())
     }
 
     pub fn get_context_snapshot(&self) -> AppResult<ContextSnapshot> {
@@ -1213,11 +1273,36 @@ fn push_focus_slot(
         return;
     }
     let duration_minutes = available_minutes.min(preferred_minutes);
+
+    // Consider time of day for energy awareness
+    let hour = gap_start.hour() as u32;
+    let (time_preference, energy_level) = if hour >= 9 && hour < 12 {
+        ("morning focus block", "high energy")
+    } else if hour >= 14 && hour < 17 {
+        ("afternoon deep work", "medium energy")
+    } else if hour >= 17 && hour < 20 {
+        ("evening session", "winding down")
+    } else {
+        ("available slot", "flexible")
+    };
+
+    let reason = if available_minutes >= preferred_minutes {
+        format!(
+            "{}: {} minutes available at {} energy. Ideal for your preferred {}-minute focus session.",
+            time_preference, available_minutes, energy_level, preferred_minutes
+        )
+    } else {
+        format!(
+            "{}: {} minutes available at {} energy. Shorter than your preferred {} minutes, but workable.",
+            time_preference, available_minutes, energy_level, preferred_minutes
+        )
+    };
+
     suggestions.push(FocusSlotSuggestion {
         starts_at: gap_start.to_rfc3339(),
         ends_at: (gap_start + chrono::Duration::minutes(duration_minutes)).to_rfc3339(),
         duration_minutes,
-        reason: format!("Open gap with {available_minutes} free minutes before the next busy block."),
+        reason,
         task_id,
     });
 }

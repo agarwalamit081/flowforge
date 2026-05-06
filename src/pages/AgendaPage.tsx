@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, CalendarDays, Inbox, Archive, RotateCcw } from "lucide-react";
+import { ArrowRight, CalendarDays, Inbox, Archive, RotateCcw, AlertCircle } from "lucide-react";
 import { useFlowForgeStore } from "../stores/useFlowForgeStore";
 
 function todayKey() {
@@ -120,7 +120,7 @@ function AgendaTaskCard({ task, date, variant, onOpen, onSchedule, onUnschedule,
 
 export function AgendaPage() {
   const date = todayKey();
-  const { tasks, loadTasks, selectTask, updateTask, deleteTask } = useFlowForgeStore();
+  const { tasks, error, loading, loadTasks, selectTask, updateTask, deleteTask } = useFlowForgeStore();
 
   useEffect(() => {
     void loadTasks();
@@ -138,6 +138,22 @@ export function AgendaPage() {
           Quick capture lands in Inbox. Move only the meaningful work onto today&apos;s agenda.
         </p>
       </section>
+
+      {error && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+          <AlertCircle className="mt-0.5 size-5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Something went wrong</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div className="card flex items-center justify-center py-8 text-ink/60">
+          <p>Loading agenda...</p>
+        </div>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="card">

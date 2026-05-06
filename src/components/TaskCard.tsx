@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Play, Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Play, Sparkles, CheckCircle2, ArrowRight, Clock, Timer } from "lucide-react";
 import type { Task } from "../types/domain";
 
 const priorityBorders: Record<Task["priority"], string> = {
@@ -21,13 +21,49 @@ interface TaskCardProps {
 export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCardProps) {
   const [showStuckChooser, setShowStuckChooser] = useState(false);
   const [stuckReason, setStuckReason] = useState("activation_friction");
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+
+  // Calculate time remaining for active focus sessions
+  useEffect(() => {
+    if (task.status === "in_progress" && task.scheduledEndAt) {
+      const calculateTimeRemaining = () => {
+        const endTime = new Date(task.scheduledEndAt!).getTime();
+        const now = Date.now();
+        const remaining = Math.max(0, Math.floor((endTime - now) / 1000 / 60)); // minutes
+        setTimeRemaining(remaining);
+      };
+
+      calculateTimeRemaining();
+      const interval = setInterval(calculateTimeRemaining, 60000); // Update every minute
+
+      return () => clearInterval(interval);
+    } else {
+      setTimeRemaining(null);
+    }
+  }, [task.status, task.scheduledEndAt]);
+
+  const isActiveFocusSession = task.status === "in_progress";
+  const showTimer = isActiveFocusSession && timeRemaining !== null;
 
   return (
-    <article className={`card border-l-4 ${priorityBorders[task.priority]}`}>
+    <article className={`card border-l-4 ${priorityBorders[task.priority]} ${isActiveFocusSession ? "ring-2 ring-leaf/50" : ""}`}>
+      {isActiveFocusSession && (
+        <div className="mb-3 flex items-center gap-2 rounded-2xl bg-leaf/20 px-3 py-2 text-sm">
+          <Timer size={16} className="text-leaf" />
+          <span className="font-medium text-leaf">Active focus session</span>
+          {showTimer && (
+            <span className="ml-auto flex items-center gap-1 text-ink/70">
+              <Clock size={14} />
+              {timeRemaining} min remaining
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className={isActiveFocusSession ? "flex-1" : ""}>
           <button className="text-left" onClick={() => onOpen(task)} type="button">
-            <h3 className="text-lg font-semibold">{task.title}</h3>
+            <h3 className={`text-lg font-semibold ${isActiveFocusSession ? "text-leaf" : ""}`}>{task.title}</h3>
           </button>
           <p className="mt-1 text-sm text-ink/70">
             Status: {task.status.replace("_", " ")} · Est. {task.estimatedMinutes ?? 0} min
@@ -44,10 +80,12 @@ export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCar
             <ArrowRight className="mr-2" size={16} />
             Details
           </button>
-          <button className="button-secondary" onClick={() => onStart(task)} type="button">
-            <Play className="mr-2" size={16} />
-            Start
-          </button>
+          {!isActiveFocusSession && (
+            <button className="button-secondary" onClick={() => onStart(task)} type="button">
+              <Play className="mr-2" size={16} />
+              Start
+            </button>
+          )}
           <button className="button-secondary" onClick={() => setShowStuckChooser((value) => !value)} type="button">
             <Sparkles className="mr-2" size={16} />
             Stuck
