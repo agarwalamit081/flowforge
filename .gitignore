@@ -27,7 +27,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+*.Zone.Identifier
 
 # Project-local agent/runtime state
 .codex/
-

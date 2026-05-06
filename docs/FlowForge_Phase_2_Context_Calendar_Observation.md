@@ -166,7 +166,7 @@ CREATE TABLE calendar_events (
   starts_at           TEXT NOT NULL,       -- ISO 8601
   ends_at             TEXT NOT NULL,       -- ISO 8601
   busy_status         TEXT NOT NULL DEFAULT 'busy'
-                       CHECK(busy_status IN ('busy', 'tentative', 'free', 'oof')),
+                       CHECK(busy_status IN ('busy', 'tentative', 'free', 'out_of_office')),
   location            TEXT,
   meeting_url         TEXT,
   source_updated_at   TEXT,                -- Google's updated timestamp
@@ -285,8 +285,7 @@ CREATE TABLE activity_segments (
   id                          TEXT PRIMARY KEY,    -- UUID v4
   app_name                    TEXT NOT NULL,       -- "Visual Studio Code"
   process_name                TEXT,                -- "Code.exe"
-  window_title                TEXT,                -- Raw title (before redaction)
-  window_title_redacted       TEXT,                -- After applying monitoring rules
+  window_title_redacted       TEXT NOT NULL,       -- ONLY the privacy-safe version is persisted
   domain                      TEXT,                -- From browser extension (Phase 4)
   started_at                  TEXT NOT NULL,       -- ISO 8601
   ended_at                    TEXT,                -- ISO 8601 (NULL if current)
@@ -341,12 +340,13 @@ impl ActiveWindowService {
             }
 
             let redacted_title = match privacy_state {
-                PrivacyState::Allowed => Some(window.title.clone()),
-                PrivacyState::RedactedTitle => Some("[REDACTED]".to_string()),
-                _ => None,
+                PrivacyState::Allowed => window.title.clone(),
+                PrivacyState::RedactedTitle => "[REDACTED]".to_string(),
+                _ => continue, // denied — skip entirely
             };
 
             // Close previous segment, start new one if app changed
+            // Note: ONLY redacted_title is persisted, never the raw title
             self.update_segment(window, redacted_title).await;
 
             // Emit event to frontend
@@ -513,9 +513,11 @@ The time-block assistant suggests optimal focus slots based on:
 
 ---
 
-## 9. Intervention Engine (v1 — Rules Only)
+## 9. Intervention Engine (v1 — Extends Phase 1 Rules)
 
-Phase 2's Intervention Engine uses **deterministic rules only**. AI-powered interventions are added in Phase 3.
+Phase 2 extends Phase 1's rule-based interventions with **context-aware** nudges. Phase 1 defined simple rules triggered by task properties (vague title, overdue, quick task). Phase 2 adds rules that react to the user's **real-time context**: calendar state, active window, focus block status, and idle time.
+
+The engine still uses **deterministic rules only**. AI-powered interventions are added in Phase 3.
 
 ### 9.1 Intervention Priority Order
 

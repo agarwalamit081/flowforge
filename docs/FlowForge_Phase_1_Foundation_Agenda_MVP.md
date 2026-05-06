@@ -46,7 +46,7 @@ The Agenda Tracker is the central nervous system of FlowForge. Every later modul
 │  │  │Projects  │ │ Settings │ │Data Viewer    │  │  │
 │  │  └──────────┘ └──────────┘ └───────────────┘  │  │
 │  └────────────────────┬───────────────────────────┘  │
-│                       │ Tauri IPC (invoke + events)  │
+│                       │ Tauri IPC (invoke only)       │
 ├───────────────────────┼──────────────────────────────┤
 │  ┌────────────────────▼───────────────────────────┐  │
 │  │               Rust Backend                     │  │
@@ -526,7 +526,7 @@ Phase 1 uses **deterministic rules** instead of LLM calls. These are simple patt
 
 | Trigger | Condition | Intervention |
 |---------|-----------|--------------|
-| User clicks `Stuck` | Always | Show modal: "What is blocking you?" with choices: `unclear`, `too_big`, `boring`, `anxious`, `waiting`, `tired` |
+| User clicks `Stuck` | Always | Show modal: "What is blocking you?" with choices: `unclear`, `too_big`, `boring`, `anxious`, `perfectionism`, `waiting`, `tired` |
 | Task has no micro-tasks | `estimated_minutes > 30` AND micro-task count = 0 | Suggest: "This task looks big. Want to break it into 3 smaller steps?" |
 | Vague task title | Title starts with "work on", "look into", "handle", "figure out", "check" | Prompt: "What does 'done' look like for this task?" |
 | Quick task detected | `estimated_minutes <= 5` OR title suggests < 5 min effort | Show Five-Minute Rule: "This takes less time than scrolling. Do it now?" |
@@ -642,18 +642,30 @@ cargo tauri --version
 Create `.cargo/config.toml` in the project root:
 
 ```toml
+# Default target for cargo build and cargo tauri dev
 [build]
 target = "x86_64-pc-windows-msvc"
 ```
 
-This ensures all `cargo` commands compile for Windows by default.
+> **Important:** This sets the default target for all `cargo` commands, including `cargo test`. On WSL2, this means `cargo test` will attempt to link against the Windows MSVC target. If you need to run tests against the Linux target instead (e.g., for non-GUI unit tests), override per-command:
+>
+> ```bash
+> cargo test --target x86_64-unknown-linux-gnu
+> ```
+>
+> Alternatively, set the target via an environment variable in your shell profile rather than in `config.toml`, so you can toggle between Windows and Linux builds:
+>
+> ```bash
+> export CARGO_BUILD_TARGET=x86_64-pc-windows-msvc   # Windows builds
+> export CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu  # Linux tests
+> ```
 
 ### 8.5 Recommended Development Workflow
 
 | Activity | Run In | Notes |
 |----------|--------|-------|
 | Write and edit code | WSL2 | Linux filesystem for performance (VS Code Remote-WSL) |
-| Run Rust unit tests | WSL2 | Tests that don't touch Windows GUI APIs |
+| Run Rust unit tests | WSL2 | Tests that don't touch Windows GUI APIs (use `--target x86_64-unknown-linux-gnu` override) |
 | SQLite migration tests | WSL2 | Pure data layer tests |
 | Frontend build checks | WSL2 | `pnpm build` to verify TS compilation |
 | Linting and formatting | WSL2 | `cargo fmt`, `cargo clippy`, `pnpm lint` |
