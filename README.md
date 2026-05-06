@@ -27,9 +27,14 @@ FlowForge is a Windows-first Tauri desktop application for agenda management, da
 - Dedicated Agenda page with inbox triage, rescheduling controls, due-date editing, and “back to inbox” workflow
 - Task detail panel with edit controls and micro-task breakdown
 - Project creation and archiving
-- Rule-based `Unstick Me` prompt generation
+- Provider-backed morning briefing and `Unstick Me` generation with deterministic fallback when no supported API key is configured
 - Local export and purge tools from Settings
 - SQLite-backed persistence with versioned migrations
+
+## AI Provider Notes
+- Supported hosted providers in the current backend: `openai`, `anthropic`
+- The app reads `FLOWFORGE_DEFAULT_AI_PROVIDER`, `FLOWFORGE_DEFAULT_MODEL`, and the matching API key from `.env`
+- If no supported provider key is configured, FlowForge falls back to deterministic local text generation
 
 ## Documentation
 - [Architecture vision](docs/architecture/flowforge_v2.md)

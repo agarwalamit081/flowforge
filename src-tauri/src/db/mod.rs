@@ -393,8 +393,9 @@ impl Database {
 
     pub fn run_morning_briefing(&self, date: &str) -> AppResult<MorningBriefing> {
         let agenda = self.list_today_agenda(date)?;
+        let settings = self.get_app_settings()?;
         let (headline, focus_prompt, suggested_task_ids) =
-            services::morning_briefing(date, &agenda.outcomes, &agenda.tasks);
+            services::morning_briefing(date, &agenda.outcomes, &agenda.tasks, &settings);
         Ok(MorningBriefing {
             date: date.to_string(),
             headline,
@@ -453,8 +454,9 @@ impl Database {
 
     pub fn record_stuck_event(&self, task_id: &str, reason: &str) -> AppResult<InterventionSuggestion> {
         let task = self.get_task(task_id)?;
+        let settings = self.get_app_settings()?;
         self.insert_event("stuck", "task", task_id, json!({ "reason": reason }))?;
-        Ok(services::stuck_suggestion(&task, reason))
+        Ok(services::stuck_suggestion(&task, reason, &settings))
     }
 
     pub fn export_user_data(&self) -> AppResult<ExportBundle> {
