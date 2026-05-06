@@ -52,8 +52,7 @@ export function DashboardPage() {
               createTask(
                 {
                   title: input.title,
-                  estimatedMinutes: input.estimatedMinutes,
-                  dueAt: `${date}T17:00:00`
+                  estimatedMinutes: input.estimatedMinutes
                 },
                 date
               )

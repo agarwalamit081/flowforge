@@ -9,7 +9,7 @@ describe("TaskComposer", () => {
 
     render(<TaskComposer onCreate={onCreate} />);
 
-    await user.type(screen.getByPlaceholderText("Quick capture a task"), "Ship FlowForge shell");
+    await user.type(screen.getByPlaceholderText("Quick capture to inbox"), "Ship FlowForge shell");
     await user.clear(screen.getByDisplayValue("25"));
     await user.type(screen.getByRole("spinbutton"), "30");
     await user.click(screen.getByRole("button", { name: "Add task" }));

@@ -1,12 +1,14 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import { LayoutDashboard, FolderKanban, Settings, Sunrise } from "lucide-react";
+import { Inbox, LayoutDashboard, FolderKanban, Settings, Sunrise } from "lucide-react";
 import { DashboardPage } from "./pages/DashboardPage";
+import { AgendaPage } from "./pages/AgendaPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { BriefingPage } from "./pages/BriefingPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 const navItems = [
   { to: "/", label: "Today", icon: LayoutDashboard },
+  { to: "/agenda", label: "Agenda", icon: Inbox },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/briefing", label: "Briefing", icon: Sunrise },
   { to: "/settings", label: "Settings", icon: Settings }
@@ -42,6 +44,7 @@ export default function App() {
         <main className="space-y-6">
           <Routes>
             <Route path="/" element={<DashboardPage />} />
+            <Route path="/agenda" element={<AgendaPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/briefing" element={<BriefingPage />} />
             <Route path="/settings" element={<SettingsPage />} />

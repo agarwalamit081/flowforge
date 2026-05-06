@@ -13,6 +13,7 @@ import type {
 interface FlowForgeState {
   agenda: TodayAgenda | null;
   briefing: MorningBriefing | null;
+  tasks: Task[];
   projects: Project[];
   settings: AppSettings | null;
   loading: boolean;
@@ -22,6 +23,7 @@ interface FlowForgeState {
   loadDashboard: (date: string) => Promise<void>;
   loadProjects: () => Promise<void>;
   loadSettings: () => Promise<void>;
+  loadTasks: () => Promise<void>;
   selectTask: (taskId: string | null) => Promise<void>;
   createTask: (input: CreateTaskRequest, date: string) => Promise<void>;
   createProject: (input: CreateProjectRequest) => Promise<void>;
@@ -63,6 +65,7 @@ function replaceTaskInAgenda(agenda: TodayAgenda | null, task: Task): TodayAgend
 export const useFlowForgeStore = create<FlowForgeState>((set) => ({
   agenda: null,
   briefing: null,
+  tasks: [],
   projects: [],
   settings: null,
   loading: false,
@@ -87,6 +90,12 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
       set({ settings });
     }, set);
   },
+  loadTasks: async () => {
+    await guard(async () => {
+      const tasks = await api.listTasks();
+      set({ tasks });
+    }, set);
+  },
   selectTask: async (taskId) => {
     if (!taskId) {
       set({ activeTask: null });
@@ -100,8 +109,8 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
   createTask: async (input, date) => {
     await guard(async () => {
       await api.createTask(input);
-      const agenda = await api.listTodayAgenda(date);
-      set({ agenda });
+      const [agenda, tasks] = await Promise.all([api.listTodayAgenda(date), api.listTasks()]);
+      set({ agenda, tasks });
     }, set);
   },
   createProject: async (input) => {
@@ -122,9 +131,14 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
   },
   setTaskStatus: async (id, status, date) => {
     await guard(async () => {
-      const [task, agenda] = await Promise.all([api.updateTaskStatus(id, status), api.listTodayAgenda(date)]);
+      const [task, agenda, tasks] = await Promise.all([
+        api.updateTaskStatus(id, status),
+        api.listTodayAgenda(date),
+        api.listTasks()
+      ]);
       set((state) => ({
         agenda,
+        tasks,
         activeTask: state.activeTask?.id === id ? task : state.activeTask
       }));
     }, set);
@@ -137,36 +151,40 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
   },
   updateTask: async (id, patch, date) => {
     await guard(async () => {
-      const [activeTask, agenda] = await Promise.all([api.updateTask(id, patch), api.listTodayAgenda(date)]);
-      set({ activeTask, agenda: replaceTaskInAgenda(agenda, activeTask) });
+      const [activeTask, agenda, tasks] = await Promise.all([
+        api.updateTask(id, patch),
+        api.listTodayAgenda(date),
+        api.listTasks()
+      ]);
+      set({ activeTask, agenda: replaceTaskInAgenda(agenda, activeTask), tasks });
     }, set);
   },
   deleteTask: async (id, date) => {
     await guard(async () => {
       await api.deleteTask(id);
-      const agenda = await api.listTodayAgenda(date);
-      set({ activeTask: null, agenda });
+      const [agenda, tasks] = await Promise.all([api.listTodayAgenda(date), api.listTasks()]);
+      set({ activeTask: null, agenda, tasks });
     }, set);
   },
   createMicroTask: async (taskId, input) => {
     await guard(async () => {
       await api.createMicroTask(taskId, input);
-      const activeTask = await api.getTask(taskId);
-      set((state) => ({ activeTask, agenda: replaceTaskInAgenda(state.agenda, activeTask) }));
+      const [activeTask, tasks] = await Promise.all([api.getTask(taskId), api.listTasks()]);
+      set((state) => ({ activeTask, agenda: replaceTaskInAgenda(state.agenda, activeTask), tasks }));
     }, set);
   },
   completeMicroTask: async (taskId, microTaskId) => {
     await guard(async () => {
       await api.completeMicroTask(microTaskId);
-      const activeTask = await api.getTask(taskId);
-      set((state) => ({ activeTask, agenda: replaceTaskInAgenda(state.agenda, activeTask) }));
+      const [activeTask, tasks] = await Promise.all([api.getTask(taskId), api.listTasks()]);
+      set((state) => ({ activeTask, agenda: replaceTaskInAgenda(state.agenda, activeTask), tasks }));
     }, set);
   },
   archiveProject: async (id) => {
     await guard(async () => {
       await api.archiveProject(id);
-      const projects = await api.listProjects();
-      set({ projects });
+      const [projects, tasks] = await Promise.all([api.listProjects(), api.listTasks()]);
+      set({ projects, tasks });
     }, set);
   },
   exportUserData: async () =>
@@ -182,7 +200,7 @@ export const useFlowForgeStore = create<FlowForgeState>((set) => ({
         api.getAppSettings(),
         api.listProjects()
       ]);
-      set({ agenda, briefing, settings, projects, activeTask: null, latestSuggestion: null });
+      set({ agenda, briefing, settings, projects, tasks: [], activeTask: null, latestSuggestion: null });
     }, set);
   },
   updateSettings: async (patch) => {

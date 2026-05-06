@@ -22,7 +22,10 @@ export function TaskComposer({ onCreate }: TaskComposerProps) {
         reset();
       })}
     >
-      <input className="input" placeholder="Quick capture a task" {...register("title", { required: true })} />
+      <div className="md:col-span-3">
+        <p className="mb-2 text-sm text-ink/60">Quick capture sends new tasks to Inbox for later triage.</p>
+      </div>
+      <input className="input" placeholder="Quick capture to inbox" {...register("title", { required: true })} />
       <input className="input" min={5} step={5} type="number" {...register("estimatedMinutes", { valueAsNumber: true })} />
       <button className="button-primary" type="submit">
         Add task

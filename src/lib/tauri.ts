@@ -58,6 +58,14 @@ export interface CreateMicroTaskRequest {
   estimatedMinutes?: number | null;
 }
 
+export interface TaskFilter {
+  status?: string | null;
+  projectId?: string | null;
+  priority?: number | null;
+  dueDate?: string | null;
+  tag?: string | null;
+}
+
 export const api = {
   listTodayAgenda: (date: string) => invoke<TodayAgenda>("list_today_agenda", { date }),
   runMorningBriefing: (date: string) => invoke<MorningBriefing>("run_morning_briefing", { date }),
@@ -70,7 +78,7 @@ export const api = {
     invoke<Task>("update_task_status", { id, status }),
   updateTask: (id: string, patch: UpdateTaskRequest) => invoke<Task>("update_task", { id, patch }),
   getTask: (taskId: string) => invoke<Task>("get_task", { taskId }),
-  listTasks: () => invoke<Task[]>("list_tasks", { filter: null }),
+  listTasks: (filter: TaskFilter | null = null) => invoke<Task[]>("list_tasks", { filter }),
   createMicroTask: (taskId: string, input: CreateMicroTaskRequest) =>
     invoke("create_micro_task", { taskId, input }),
   completeMicroTask: (id: string) => invoke("complete_micro_task", { id }),
