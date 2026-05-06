@@ -96,6 +96,83 @@ export interface FocusSession {
   actualMinutes: number | null;
 }
 
+export interface CalendarAccount {
+  id: string;
+  provider: string;
+  email: string;
+  displayName: string | null;
+  syncEnabled: boolean;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  providerEventId: string;
+  accountId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  busyStatus: "busy" | "tentative" | "free" | "out_of_office";
+  location: string | null;
+  meetingUrl: string | null;
+  sourceUpdatedAt: string | null;
+  localUpdatedAt: string;
+}
+
+export interface FocusBlock {
+  id: string;
+  taskId: string | null;
+  calendarEventId: string | null;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  status: "planned" | "active" | "completed" | "cancelled";
+  createdBy: "user" | "suggested";
+  createdAt: string;
+}
+
+export interface MonitoringRule {
+  id: string;
+  ruleType: string;
+  pattern: string;
+  action: "allow" | "redact_title" | "deny";
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface ActivitySegment {
+  id: string;
+  appName: string | null;
+  processName: string | null;
+  windowTitleRedacted: string | null;
+  domain: string | null;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  privacyState: "allowed" | "redacted_title" | "denied";
+  linkedFocusSessionId: string | null;
+}
+
+export interface ContextSnapshot {
+  generatedAt: string;
+  state: "focus_block_active" | "in_meeting" | "unplanned_time";
+  activeCalendarEventId: string | null;
+  activeFocusBlockId: string | null;
+  currentTaskId: string | null;
+  activitySummary: string | null;
+  nudge: string | null;
+}
+
+export interface FocusSlotSuggestion {
+  startsAt: string;
+  endsAt: string;
+  durationMinutes: number;
+  reason: string;
+  taskId: string | null;
+}
+
 export interface InterventionSuggestion {
   taskId: string;
   reason: string;

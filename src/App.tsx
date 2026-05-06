@@ -1,16 +1,19 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useEffect } from "react";
-import { Inbox, LayoutDashboard, FolderKanban, Settings, Sunrise } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Inbox, LayoutDashboard, FolderKanban, Settings, Sunrise, Radar } from "lucide-react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { BriefingPage } from "./pages/BriefingPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ContextPage } from "./pages/ContextPage";
 import { useFlowForgeStore } from "./stores/useFlowForgeStore";
 
 const navItems = [
   { to: "/", label: "Today", icon: LayoutDashboard },
   { to: "/agenda", label: "Agenda", icon: Inbox },
+  { to: "/context", label: "Context", icon: Radar },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/briefing", label: "Briefing", icon: Sunrise },
   { to: "/settings", label: "Settings", icon: Settings }
@@ -32,14 +35,44 @@ export default function App() {
     const applyTheme = () => {
       const mode = settings?.theme ?? "system";
       const resolved = mode === "system" ? (mediaQuery.matches ? "dark" : "light") : mode;
+
+      // Store resolved theme in localStorage for persistence across sessions
+      localStorage.setItem("flowforge-theme", resolved);
+
       root.classList.remove("theme-light", "theme-dark");
       root.classList.add(resolved === "dark" ? "theme-dark" : "theme-light");
     };
+
+    // Apply theme on mount to prevent flicker
+    const savedTheme = localStorage.getItem("flowforge-theme");
+    if (savedTheme && (savedTheme === "light" || savedTheme === "dark")) {
+      root.classList.remove("theme-light", "theme-dark");
+      root.classList.add(savedTheme === "dark" ? "theme-dark" : "theme-light");
+    }
 
     applyTheme();
     mediaQuery.addEventListener("change", applyTheme);
     return () => mediaQuery.removeEventListener("change", applyTheme);
   }, [settings?.theme]);
+
+  useEffect(() => {
+    const currentWindow = getCurrentWindow();
+    let unlistenResize: (() => void) | undefined;
+
+    // Window close-to-tray is handled in Rust (src-tauri/src/lib.rs)
+    // This prevents duplicate event handling
+    void currentWindow.onResized(async () => {
+      if (await currentWindow.isMinimized()) {
+        await currentWindow.hide();
+      }
+    }).then((fn) => {
+      unlistenResize = fn;
+    });
+
+    return () => {
+      unlistenResize?.();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen px-4 py-6 text-ink md:px-8">
@@ -71,6 +104,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/agenda" element={<AgendaPage />} />
+            <Route path="/context" element={<ContextPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/briefing" element={<BriefingPage />} />
             <Route path="/settings" element={<SettingsPage />} />

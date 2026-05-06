@@ -4,7 +4,9 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::models::{AppSettings, DailyOutcome, InterventionSuggestion, Task};
+use crate::models::{
+    AppSettings, CalendarEvent, ContextSnapshot, DailyOutcome, FocusBlock, InterventionSuggestion, Task,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct BriefingPayload {
@@ -17,6 +19,67 @@ struct BriefingPayload {
 struct StuckPayload {
     prompt: String,
     next_step: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GoogleTokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GoogleUserInfo {
+    email: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GoogleCalendarListResponse {
+    items: Vec<GoogleCalendarEvent>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GoogleCalendarEvent {
+    id: String,
+    summary: Option<String>,
+    location: Option<String>,
+    updated: Option<String>,
+    #[serde(default)]
+    hangout_link: Option<String>,
+    start: GoogleEventDateTime,
+    end: GoogleEventDateTime,
+    #[serde(default)]
+    transparency: Option<String>,
+    #[serde(default)]
+    event_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GoogleEventDateTime {
+    #[serde(default)]
+    date_time: Option<String>,
+    #[serde(default)]
+    date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GoogleCalendarBootstrap {
+    pub email: String,
+    pub display_name: Option<String>,
+    pub refresh_token: String,
+    pub events: Vec<FetchedCalendarEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchedCalendarEvent {
+    pub provider_event_id: String,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub busy_status: String,
+    pub location: Option<String>,
+    pub meeting_url: Option<String>,
+    pub source_updated_at: Option<String>,
 }
 
 pub fn morning_briefing(
@@ -306,6 +369,156 @@ fn normalize_briefing_payload(payload: BriefingPayload, tasks: &[Task]) -> Optio
     }
 
     Some((payload.headline, payload.focus_prompt, suggested_task_ids))
+}
+
+pub fn connect_google_calendar(
+    authorization_code: &str,
+    redirect_uri: &str,
+    code_verifier: &str,
+) -> Result<GoogleCalendarBootstrap, String> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID")
+        .map_err(|_| "GOOGLE_CLIENT_ID is not configured".to_string())?;
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET")
+        .map_err(|_| "GOOGLE_CLIENT_SECRET is not configured".to_string())?;
+    let client = http_client()?;
+
+    let token_response = client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("code", authorization_code),
+            ("code_verifier", code_verifier),
+            ("grant_type", "authorization_code"),
+            ("redirect_uri", redirect_uri),
+        ])
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !token_response.status().is_success() {
+        return Err(format!("google token exchange failed with {}", token_response.status()));
+    }
+
+    let tokens: GoogleTokenResponse = token_response.json().map_err(|error| error.to_string())?;
+    let refresh_token = tokens
+        .refresh_token
+        .ok_or_else(|| "Google did not return a refresh token; revoke access and retry consent".to_string())?;
+
+    let user_info_response = client
+        .get("https://www.googleapis.com/oauth2/v2/userinfo")
+        .bearer_auth(&tokens.access_token)
+        .send()
+        .map_err(|error| error.to_string())?;
+    if !user_info_response.status().is_success() {
+        return Err(format!("google user info failed with {}", user_info_response.status()));
+    }
+    let user_info: GoogleUserInfo = user_info_response.json().map_err(|error| error.to_string())?;
+
+    let events = fetch_google_calendar_events_with_access_token(&tokens.access_token)?;
+
+    Ok(GoogleCalendarBootstrap {
+        email: user_info.email,
+        display_name: user_info.name,
+        refresh_token,
+        events,
+    })
+}
+
+pub fn derive_context_snapshot(
+    now: &str,
+    active_event: Option<&CalendarEvent>,
+    active_focus_block: Option<&FocusBlock>,
+) -> ContextSnapshot {
+    let generated_at = now.to_string();
+    if let Some(focus_block) = active_focus_block {
+        return ContextSnapshot {
+            generated_at,
+            state: "focus_block_active".to_string(),
+            active_calendar_event_id: active_event.map(|event| event.id.clone()),
+            active_focus_block_id: Some(focus_block.id.clone()),
+            current_task_id: focus_block.task_id.clone(),
+            activity_summary: Some(format!("Focused on {}", focus_block.title)),
+            nudge: Some("Stay with the current block until the planned end time.".to_string()),
+        };
+    }
+
+    if let Some(event) = active_event {
+        return ContextSnapshot {
+            generated_at,
+            state: "in_meeting".to_string(),
+            active_calendar_event_id: Some(event.id.clone()),
+            active_focus_block_id: None,
+            current_task_id: None,
+            activity_summary: Some(format!("Calendar says you are busy with {}", event.title)),
+            nudge: None,
+        };
+    }
+
+    ContextSnapshot {
+        generated_at,
+        state: "unplanned_time".to_string(),
+        active_calendar_event_id: None,
+        active_focus_block_id: None,
+        current_task_id: None,
+        activity_summary: Some("No active meeting or focus block detected.".to_string()),
+        nudge: Some("Use Agenda to plan a focus block before switching contexts.".to_string()),
+    }
+}
+
+fn fetch_google_calendar_events_with_access_token(access_token: &str) -> Result<Vec<FetchedCalendarEvent>, String> {
+    let client = http_client()?;
+    let now = chrono::Utc::now();
+    let time_min = now.format("%Y-%m-%dT00:00:00Z").to_string();
+    let time_max = (now + chrono::Duration::days(14))
+        .format("%Y-%m-%dT23:59:59Z")
+        .to_string();
+    let response = client
+        .get("https://www.googleapis.com/calendar/v3/calendars/primary/events")
+        .query(&[
+            ("singleEvents", "true"),
+            ("orderBy", "startTime"),
+            ("timeMin", time_min.as_str()),
+            ("timeMax", time_max.as_str()),
+        ])
+        .bearer_auth(access_token)
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("google calendar sync failed with {}", response.status()));
+    }
+
+    let payload: GoogleCalendarListResponse = response.json().map_err(|error| error.to_string())?;
+    Ok(payload.items.into_iter().filter_map(map_google_event).collect())
+}
+
+fn map_google_event(event: GoogleCalendarEvent) -> Option<FetchedCalendarEvent> {
+    let starts_at = event
+        .start
+        .date_time
+        .or_else(|| event.start.date.map(|value| format!("{value}T00:00:00Z")))?;
+    let ends_at = event
+        .end
+        .date_time
+        .or_else(|| event.end.date.map(|value| format!("{value}T23:59:59Z")))?;
+    let busy_status = if event.event_type.as_deref() == Some("outOfOffice") {
+        "out_of_office"
+    } else if event.transparency.as_deref() == Some("transparent") {
+        "free"
+    } else {
+        "busy"
+    };
+
+    Some(FetchedCalendarEvent {
+        provider_event_id: event.id,
+        title: event.summary.unwrap_or_else(|| "Untitled event".to_string()),
+        starts_at,
+        ends_at,
+        busy_status: busy_status.to_string(),
+        location: event.location,
+        meeting_url: event.hangout_link,
+        source_updated_at: event.updated,
+    })
 }
 
 #[cfg(test)]

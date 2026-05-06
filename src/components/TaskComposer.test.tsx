@@ -14,6 +14,12 @@ describe("TaskComposer", () => {
     await user.type(screen.getByRole("spinbutton"), "30");
     await user.click(screen.getByRole("button", { name: "Add task" }));
 
-    expect(onCreate).toHaveBeenCalledWith({ title: "Ship FlowForge shell", estimatedMinutes: 30 });
+    expect(onCreate).toHaveBeenCalledWith({
+      title: "Ship FlowForge shell",
+      description: null,
+      priority: 3,
+      dueAt: null,
+      estimatedMinutes: 30
+    });
   });
 });

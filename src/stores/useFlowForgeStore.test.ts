@@ -22,7 +22,22 @@ const { api } = vi.hoisted(() => ({
     exportUserData: vi.fn(),
     purgeUserData: vi.fn(),
     getAppSettings: vi.fn(),
-    updateAppSettings: vi.fn()
+    updateAppSettings: vi.fn(),
+    connectCalendar: vi.fn(),
+    disconnectCalendar: vi.fn(),
+    listCalendarAccounts: vi.fn(),
+    listCalendarEvents: vi.fn(),
+    suggestFocusSlots: vi.fn(),
+    createFocusBlock: vi.fn(),
+    cancelFocusBlock: vi.fn(),
+    startFocusBlock: vi.fn(),
+    endFocusBlock: vi.fn(),
+    listFocusBlocks: vi.fn(),
+    listMonitoringRules: vi.fn(),
+    createMonitoringRule: vi.fn(),
+    deleteMonitoringRule: vi.fn(),
+    getActivityLog: vi.fn(),
+    getContextSnapshot: vi.fn()
   }
 }));
 
@@ -68,6 +83,13 @@ function resetStore() {
     tasks: [],
     projects: [],
     settings: null,
+    calendarAccounts: [],
+    calendarEvents: [],
+    focusBlocks: [],
+    monitoringRules: [],
+    activityLog: [],
+    contextSnapshot: null,
+    focusSuggestions: [],
     loading: false,
     activeTask: null,
     latestSuggestion: null,

@@ -10,14 +10,21 @@ use db::Database;
 use tauri::{
     menu::MenuBuilder,
     tray::TrayIconBuilder,
-    Manager, WebviewWindowBuilder,
+    Emitter, Manager, WebviewWindowBuilder, WindowEvent,
 };
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_oauth::init())
         .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             let app_dir = app.path().app_data_dir()?;
             fs::create_dir_all(&app_dir)?;
@@ -35,6 +42,19 @@ pub fn run() {
                     .title("FlowForge")
                     .build()?
             };
+            if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if matches!(event, WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed) {
+                        return;
+                    }
+                    if let WindowEvent::Resized(size) = event {
+                        if size.width == 0 || size.height == 0 {
+                            let _ = window_clone.hide();
+                        }
+                    }
+                });
+            }
 
             let tray_menu = MenuBuilder::new(app)
                 .text("open", "Open FlowForge")
@@ -62,6 +82,14 @@ pub fn run() {
                     _ => {}
                 })
                 .build(app)?;
+
+            let app_handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(15));
+                if let Ok(snapshot) = app_handle.state::<Database>().get_context_snapshot() {
+                    let _ = app_handle.emit("context-update", snapshot);
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -86,7 +114,22 @@ pub fn run() {
             export_user_data,
             purge_user_data,
             get_app_settings,
-            update_app_settings
+            update_app_settings,
+            connect_calendar,
+            disconnect_calendar,
+            list_calendar_accounts,
+            list_calendar_events,
+            suggest_focus_slots,
+            create_focus_block,
+            cancel_focus_block,
+            start_focus_block,
+            end_focus_block,
+            list_focus_blocks,
+            list_monitoring_rules,
+            create_monitoring_rule,
+            delete_monitoring_rule,
+            get_activity_log,
+            get_context_snapshot
         ])
         .run(tauri::generate_context!())
         .expect("error while running FlowForge");

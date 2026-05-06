@@ -1,11 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  ActivitySegment,
+  CalendarAccount,
+  CalendarEvent,
+  ContextSnapshot,
   DailyOutcome,
   ExportBundle,
+  FocusBlock,
+  FocusSlotSuggestion,
   FocusSession,
   InterventionSuggestion,
   MorningBriefing,
+  MonitoringRule,
   Project,
   Task,
   TaskStatus,
@@ -58,6 +65,41 @@ export interface CreateMicroTaskRequest {
   estimatedMinutes?: number | null;
 }
 
+export interface CalendarConnectRequest {
+  provider: "google";
+  authorizationCode: string;
+  redirectUri: string;
+  codeVerifier: string;
+}
+
+export interface CalendarRangeRequest {
+  start: string;
+  end: string;
+}
+
+export interface FocusSlotSuggestionRequest {
+  taskId?: string | null;
+  start: string;
+  end: string;
+  preferredMinutes?: number | null;
+}
+
+export interface CreateFocusBlockRequest {
+  taskId?: string | null;
+  calendarEventId?: string | null;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  createdBy?: "user" | "suggested";
+}
+
+export interface CreateMonitoringRuleRequest {
+  ruleType: string;
+  pattern: string;
+  action: "allow" | "redact_title" | "deny";
+  reason?: string | null;
+}
+
 export interface TaskFilter {
   status?: string | null;
   projectId?: string | null;
@@ -92,5 +134,27 @@ export const api = {
   purgeUserData: () => invoke("purge_user_data"),
   getAppSettings: () => invoke<AppSettings>("get_app_settings"),
   updateAppSettings: (patch: UpdateSettingsRequest) =>
-    invoke<AppSettings>("update_app_settings", { patch })
+    invoke<AppSettings>("update_app_settings", { patch }),
+  connectCalendar: (input: CalendarConnectRequest) =>
+    invoke<CalendarAccount>("connect_calendar", { input }),
+  disconnectCalendar: (accountId: string) => invoke("disconnect_calendar", { accountId }),
+  listCalendarAccounts: () => invoke<CalendarAccount[]>("list_calendar_accounts"),
+  listCalendarEvents: (range: CalendarRangeRequest) =>
+    invoke<CalendarEvent[]>("list_calendar_events", { range }),
+  suggestFocusSlots: (input: FocusSlotSuggestionRequest) =>
+    invoke<FocusSlotSuggestion[]>("suggest_focus_slots", { input }),
+  createFocusBlock: (input: CreateFocusBlockRequest) =>
+    invoke<FocusBlock>("create_focus_block", { input }),
+  cancelFocusBlock: (id: string) => invoke<FocusBlock>("cancel_focus_block", { id }),
+  startFocusBlock: (id: string) => invoke<FocusBlock>("start_focus_block", { id }),
+  endFocusBlock: (id: string) => invoke<FocusBlock>("end_focus_block", { id }),
+  listFocusBlocks: (range: CalendarRangeRequest) =>
+    invoke<FocusBlock[]>("list_focus_blocks", { range }),
+  listMonitoringRules: () => invoke<MonitoringRule[]>("list_monitoring_rules"),
+  createMonitoringRule: (input: CreateMonitoringRuleRequest) =>
+    invoke<MonitoringRule>("create_monitoring_rule", { input }),
+  deleteMonitoringRule: (id: string) => invoke("delete_monitoring_rule", { id }),
+  getActivityLog: (range: CalendarRangeRequest) =>
+    invoke<ActivitySegment[]>("get_activity_log", { range }),
+  getContextSnapshot: () => invoke<ContextSnapshot>("get_context_snapshot")
 };

@@ -11,6 +11,7 @@ use crate::models::*;
 use crate::services;
 
 const MIGRATION_0001: &str = include_str!("migrations/0001_initial.sql");
+const MIGRATION_0002: &str = include_str!("migrations/0002_phase2_context.sql");
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -18,6 +19,8 @@ pub enum AppError {
     Db(#[from] rusqlite::Error),
     #[error("serialization error: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("application error: {0}")]
+    Message(String),
     #[error("not found: {0}")]
     NotFound(String),
 }
@@ -34,12 +37,14 @@ impl Database {
     pub fn new(path: &Path, default_ai_provider: String, default_ai_model: String) -> AppResult<Self> {
         let connection = Connection::open(path)?;
         connection.execute_batch(MIGRATION_0001)?;
+        connection.execute_batch(MIGRATION_0002)?;
         let db = Self {
             connection: Mutex::new(connection),
             default_ai_provider,
             default_ai_model,
         };
         db.seed_settings()?;
+        db.seed_monitoring_rules()?;
         Ok(db)
     }
 
@@ -47,12 +52,14 @@ impl Database {
     pub fn new_in_memory() -> AppResult<Self> {
         let connection = Connection::open_in_memory()?;
         connection.execute_batch(MIGRATION_0001)?;
+        connection.execute_batch(MIGRATION_0002)?;
         let db = Self {
             connection: Mutex::new(connection),
             default_ai_provider: "openai".to_string(),
             default_ai_model: "gpt-4.1-mini".to_string(),
         };
         db.seed_settings()?;
+        db.seed_monitoring_rules()?;
         Ok(db)
     }
 
@@ -75,6 +82,40 @@ impl Database {
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?1, ?2)",
                 params![key, value],
             )?;
+        }
+        Ok(())
+    }
+
+    fn seed_monitoring_rules(&self) -> AppResult<()> {
+        let conn = self.conn();
+        for (rule_type, pattern, action, reason) in [
+            ("app", "1Password", "deny", "Credential entry should never be tracked."),
+            ("app", "Bitwarden", "deny", "Credential entry should never be tracked."),
+            ("app", "KeePassXC", "deny", "Credential entry should never be tracked."),
+            ("domain", "mail.google.com", "redact_title", "Email subjects should be redacted."),
+            ("domain", "calendar.google.com", "redact_title", "Meeting titles can contain sensitive data."),
+        ] {
+            let exists: Option<String> = conn
+                .query_row(
+                    "SELECT id FROM monitoring_rules WHERE rule_type = ?1 AND pattern = ?2",
+                    params![rule_type, pattern],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if exists.is_none() {
+                conn.execute(
+                    "INSERT INTO monitoring_rules (id, rule_type, pattern, action, reason, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        Uuid::new_v4().to_string(),
+                        rule_type,
+                        pattern,
+                        action,
+                        reason,
+                        now()
+                    ],
+                )?;
+            }
         }
         Ok(())
     }
@@ -550,6 +591,264 @@ impl Database {
         Ok(current)
     }
 
+    pub fn connect_calendar(&self, input: CalendarConnectRequest) -> AppResult<CalendarAccount> {
+        if input.provider != "google" {
+            return Err(AppError::Message("only google calendar is supported in Phase 2".to_string()));
+        }
+
+        let bootstrap = services::connect_google_calendar(
+            &input.authorization_code,
+            &input.redirect_uri,
+            &input.code_verifier,
+        )
+        .map_err(AppError::Message)?;
+
+        let account = CalendarAccount {
+            id: Uuid::new_v4().to_string(),
+            provider: input.provider,
+            email: bootstrap.email.clone(),
+            display_name: bootstrap.display_name.clone(),
+            sync_enabled: true,
+            last_synced_at: Some(now()),
+            created_at: now(),
+            updated_at: now(),
+        };
+
+        let keyring_entry = keyring::Entry::new("flowforge-google-calendar", &account.email)
+            .map_err(|error| AppError::Message(error.to_string()))?;
+        keyring_entry
+            .set_password(&bootstrap.refresh_token)
+            .map_err(|error| AppError::Message(error.to_string()))?;
+
+        let conn = self.conn();
+        conn.execute(
+            "INSERT INTO calendar_accounts (id, provider, email, display_name, sync_enabled, last_synced_at, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7)",
+            params![
+                account.id,
+                account.provider,
+                account.email,
+                account.display_name,
+                account.last_synced_at,
+                account.created_at,
+                account.updated_at
+            ],
+        )?;
+        drop(conn);
+        self.upsert_calendar_events(&account.id, &bootstrap.events)?;
+        self.list_calendar_accounts()?
+            .into_iter()
+            .find(|candidate| candidate.id == account.id)
+            .ok_or_else(|| AppError::NotFound(format!("calendar account {}", account.id)))
+    }
+
+    pub fn disconnect_calendar(&self, account_id: &str) -> AppResult<()> {
+        let account = self.get_calendar_account(account_id)?;
+        let entry = keyring::Entry::new("flowforge-google-calendar", &account.email)
+            .map_err(|error| AppError::Message(error.to_string()))?;
+        let _ = entry.delete_credential();
+        self.conn()
+            .execute("DELETE FROM calendar_accounts WHERE id = ?1", params![account_id])?;
+        Ok(())
+    }
+
+    pub fn list_calendar_accounts(&self) -> AppResult<Vec<CalendarAccount>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, provider, email, display_name, sync_enabled, last_synced_at, created_at, updated_at
+             FROM calendar_accounts
+             ORDER BY updated_at DESC",
+        )?;
+        let rows = statement.query_map([], map_calendar_account)?;
+        collect_rows(rows)
+    }
+
+    pub fn list_calendar_events(&self, start: &str, end: &str) -> AppResult<Vec<CalendarEvent>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, provider_event_id, account_id, title, starts_at, ends_at, busy_status, location, meeting_url, source_updated_at, local_updated_at
+             FROM calendar_events
+             WHERE starts_at < ?2 AND ends_at > ?1
+             ORDER BY starts_at ASC",
+        )?;
+        let rows = statement.query_map(params![start, end], map_calendar_event)?;
+        collect_rows(rows)
+    }
+
+    pub fn suggest_focus_slots(&self, input: FocusSlotSuggestionRequest) -> AppResult<Vec<FocusSlotSuggestion>> {
+        let tasks = self.list_tasks(None)?;
+        let preferred_minutes = input
+            .preferred_minutes
+            .or_else(|| {
+                input.task_id.as_ref().and_then(|task_id| {
+                    tasks.iter()
+                        .find(|task| &task.id == task_id)
+                        .and_then(|task| task.estimated_minutes)
+                })
+            })
+            .unwrap_or(45)
+            .max(15);
+        let mut busy_windows: Vec<(DateTime<Utc>, DateTime<Utc>)> = self
+            .list_calendar_events(&input.start, &input.end)?
+            .into_iter()
+            .filter(|event| event.busy_status != "free")
+            .filter_map(|event| parse_window(&event.starts_at, &event.ends_at))
+            .collect();
+        busy_windows.extend(
+            self.list_focus_blocks(&input.start, &input.end)?
+                .into_iter()
+                .filter(|block| block.status != "cancelled")
+                .filter_map(|block| parse_window(&block.starts_at, &block.ends_at)),
+        );
+        busy_windows.sort_by_key(|window| window.0);
+
+        let Some(range_start) = parse_datetime(&input.start) else {
+            return Err(AppError::Message("invalid start range".to_string()));
+        };
+        let Some(range_end) = parse_datetime(&input.end) else {
+            return Err(AppError::Message("invalid end range".to_string()));
+        };
+
+        let mut cursor = range_start;
+        let mut suggestions = Vec::new();
+        for (busy_start, busy_end) in busy_windows {
+            if busy_start > cursor {
+                push_focus_slot(
+                    &mut suggestions,
+                    cursor,
+                    busy_start,
+                    preferred_minutes,
+                    input.task_id.clone(),
+                );
+            }
+            if busy_end > cursor {
+                cursor = busy_end;
+            }
+        }
+        if range_end > cursor {
+            push_focus_slot(
+                &mut suggestions,
+                cursor,
+                range_end,
+                preferred_minutes,
+                input.task_id.clone(),
+            );
+        }
+        suggestions.truncate(3);
+        Ok(suggestions)
+    }
+
+    pub fn create_focus_block(&self, input: CreateFocusBlockRequest) -> AppResult<FocusBlock> {
+        let focus_block = FocusBlock {
+            id: Uuid::new_v4().to_string(),
+            task_id: input.task_id,
+            calendar_event_id: input.calendar_event_id,
+            title: input.title,
+            starts_at: input.starts_at,
+            ends_at: input.ends_at,
+            status: "planned".to_string(),
+            created_by: input.created_by.unwrap_or_else(|| "user".to_string()),
+            created_at: now(),
+        };
+        self.conn().execute(
+            "INSERT INTO focus_blocks (id, task_id, calendar_event_id, title, starts_at, ends_at, status, created_by, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                focus_block.id,
+                focus_block.task_id,
+                focus_block.calendar_event_id,
+                focus_block.title,
+                focus_block.starts_at,
+                focus_block.ends_at,
+                focus_block.status,
+                focus_block.created_by,
+                focus_block.created_at
+            ],
+        )?;
+        self.get_focus_block(&focus_block.id)
+    }
+
+    pub fn cancel_focus_block(&self, id: &str) -> AppResult<FocusBlock> {
+        self.update_focus_block_status(id, "cancelled")
+    }
+
+    pub fn start_focus_block(&self, id: &str) -> AppResult<FocusBlock> {
+        self.update_focus_block_status(id, "active")
+    }
+
+    pub fn end_focus_block(&self, id: &str) -> AppResult<FocusBlock> {
+        self.update_focus_block_status(id, "completed")
+    }
+
+    pub fn list_focus_blocks(&self, start: &str, end: &str) -> AppResult<Vec<FocusBlock>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, task_id, calendar_event_id, title, starts_at, ends_at, status, created_by, created_at
+             FROM focus_blocks
+             WHERE starts_at < ?2 AND ends_at > ?1
+             ORDER BY starts_at ASC",
+        )?;
+        let rows = statement.query_map(params![start, end], map_focus_block)?;
+        collect_rows(rows)
+    }
+
+    pub fn list_monitoring_rules(&self) -> AppResult<Vec<MonitoringRule>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, rule_type, pattern, action, reason, created_at
+             FROM monitoring_rules
+             ORDER BY rule_type ASC, pattern ASC",
+        )?;
+        let rows = statement.query_map([], map_monitoring_rule)?;
+        collect_rows(rows)
+    }
+
+    pub fn create_monitoring_rule(&self, input: CreateMonitoringRuleRequest) -> AppResult<MonitoringRule> {
+        let rule = MonitoringRule {
+            id: Uuid::new_v4().to_string(),
+            rule_type: input.rule_type,
+            pattern: input.pattern,
+            action: input.action,
+            reason: input.reason,
+            created_at: now(),
+        };
+        self.conn().execute(
+            "INSERT INTO monitoring_rules (id, rule_type, pattern, action, reason, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![rule.id, rule.rule_type, rule.pattern, rule.action, rule.reason, rule.created_at],
+        )?;
+        Ok(rule)
+    }
+
+    pub fn delete_monitoring_rule(&self, id: &str) -> AppResult<()> {
+        self.conn()
+            .execute("DELETE FROM monitoring_rules WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_activity_log(&self, start: &str, end: &str) -> AppResult<Vec<ActivitySegment>> {
+        let conn = self.conn();
+        let mut statement = conn.prepare(
+            "SELECT id, app_name, process_name, window_title_redacted, domain, started_at, ended_at, duration_seconds, privacy_state, linked_focus_session_id
+             FROM activity_segments
+             WHERE started_at < ?2 AND ended_at > ?1
+             ORDER BY started_at DESC",
+        )?;
+        let rows = statement.query_map(params![start, end], map_activity_segment)?;
+        collect_rows(rows)
+    }
+
+    pub fn get_context_snapshot(&self) -> AppResult<ContextSnapshot> {
+        let now_value = now();
+        let active_event = self.active_calendar_event(&now_value)?;
+        let active_focus_block = self.active_focus_block(&now_value)?;
+        Ok(services::derive_context_snapshot(
+            &now_value,
+            active_event.as_ref(),
+            active_focus_block.as_ref(),
+        ))
+    }
+
     fn list_daily_outcomes(&self, date: &str) -> AppResult<Vec<DailyOutcome>> {
         let conn = self.conn();
         let mut statement = conn.prepare(
@@ -587,6 +886,112 @@ impl Database {
             ],
         )?;
         Ok(())
+    }
+
+    fn get_calendar_account(&self, account_id: &str) -> AppResult<CalendarAccount> {
+        let conn = self.conn();
+        conn.query_row(
+            "SELECT id, provider, email, display_name, sync_enabled, last_synced_at, created_at, updated_at
+             FROM calendar_accounts WHERE id = ?1",
+            params![account_id],
+            map_calendar_account,
+        )
+        .optional()?
+        .ok_or_else(|| AppError::NotFound(format!("calendar account {account_id}")))
+    }
+
+    fn upsert_calendar_events(
+        &self,
+        account_id: &str,
+        events: &[services::FetchedCalendarEvent],
+    ) -> AppResult<()> {
+        let conn = self.conn();
+        for event in events {
+            conn.execute(
+                "INSERT INTO calendar_events (
+                    id, provider_event_id, account_id, title, starts_at, ends_at, busy_status,
+                    location, meeting_url, source_updated_at, local_updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ON CONFLICT(account_id, provider_event_id)
+                 DO UPDATE SET
+                    title = excluded.title,
+                    starts_at = excluded.starts_at,
+                    ends_at = excluded.ends_at,
+                    busy_status = excluded.busy_status,
+                    location = excluded.location,
+                    meeting_url = excluded.meeting_url,
+                    source_updated_at = excluded.source_updated_at,
+                    local_updated_at = excluded.local_updated_at",
+                params![
+                    Uuid::new_v4().to_string(),
+                    event.provider_event_id,
+                    account_id,
+                    event.title,
+                    event.starts_at,
+                    event.ends_at,
+                    event.busy_status,
+                    event.location,
+                    event.meeting_url,
+                    event.source_updated_at,
+                    now()
+                ],
+            )?;
+        }
+        conn.execute(
+            "UPDATE calendar_accounts SET last_synced_at = ?2, updated_at = ?2 WHERE id = ?1",
+            params![account_id, now()],
+        )?;
+        Ok(())
+    }
+
+    fn get_focus_block(&self, id: &str) -> AppResult<FocusBlock> {
+        let conn = self.conn();
+        conn.query_row(
+            "SELECT id, task_id, calendar_event_id, title, starts_at, ends_at, status, created_by, created_at
+             FROM focus_blocks WHERE id = ?1",
+            params![id],
+            map_focus_block,
+        )
+        .optional()?
+        .ok_or_else(|| AppError::NotFound(format!("focus block {id}")))
+    }
+
+    fn update_focus_block_status(&self, id: &str, status: &str) -> AppResult<FocusBlock> {
+        self.conn().execute(
+            "UPDATE focus_blocks SET status = ?2 WHERE id = ?1",
+            params![id, status],
+        )?;
+        self.get_focus_block(id)
+    }
+
+    fn active_calendar_event(&self, at: &str) -> AppResult<Option<CalendarEvent>> {
+        let conn = self.conn();
+        conn.query_row(
+            "SELECT id, provider_event_id, account_id, title, starts_at, ends_at, busy_status, location, meeting_url, source_updated_at, local_updated_at
+             FROM calendar_events
+             WHERE starts_at <= ?1 AND ends_at >= ?1 AND busy_status != 'free'
+             ORDER BY starts_at ASC
+             LIMIT 1",
+            params![at],
+            map_calendar_event,
+        )
+        .optional()
+        .map_err(AppError::from)
+    }
+
+    fn active_focus_block(&self, at: &str) -> AppResult<Option<FocusBlock>> {
+        let conn = self.conn();
+        conn.query_row(
+            "SELECT id, task_id, calendar_event_id, title, starts_at, ends_at, status, created_by, created_at
+             FROM focus_blocks
+             WHERE starts_at <= ?1 AND ends_at >= ?1 AND status IN ('planned', 'active')
+             ORDER BY starts_at ASC
+             LIMIT 1",
+            params![at],
+            map_focus_block,
+        )
+        .optional()
+        .map_err(AppError::from)
     }
 }
 
@@ -703,6 +1108,75 @@ fn map_focus_session(row: &Row<'_>) -> rusqlite::Result<FocusSession> {
     })
 }
 
+fn map_calendar_account(row: &Row<'_>) -> rusqlite::Result<CalendarAccount> {
+    Ok(CalendarAccount {
+        id: row.get(0)?,
+        provider: row.get(1)?,
+        email: row.get(2)?,
+        display_name: row.get(3)?,
+        sync_enabled: row.get(4)?,
+        last_synced_at: row.get(5)?,
+        created_at: row.get(6)?,
+        updated_at: row.get(7)?,
+    })
+}
+
+fn map_calendar_event(row: &Row<'_>) -> rusqlite::Result<CalendarEvent> {
+    Ok(CalendarEvent {
+        id: row.get(0)?,
+        provider_event_id: row.get(1)?,
+        account_id: row.get(2)?,
+        title: row.get(3)?,
+        starts_at: row.get(4)?,
+        ends_at: row.get(5)?,
+        busy_status: row.get(6)?,
+        location: row.get(7)?,
+        meeting_url: row.get(8)?,
+        source_updated_at: row.get(9)?,
+        local_updated_at: row.get(10)?,
+    })
+}
+
+fn map_focus_block(row: &Row<'_>) -> rusqlite::Result<FocusBlock> {
+    Ok(FocusBlock {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        calendar_event_id: row.get(2)?,
+        title: row.get(3)?,
+        starts_at: row.get(4)?,
+        ends_at: row.get(5)?,
+        status: row.get(6)?,
+        created_by: row.get(7)?,
+        created_at: row.get(8)?,
+    })
+}
+
+fn map_monitoring_rule(row: &Row<'_>) -> rusqlite::Result<MonitoringRule> {
+    Ok(MonitoringRule {
+        id: row.get(0)?,
+        rule_type: row.get(1)?,
+        pattern: row.get(2)?,
+        action: row.get(3)?,
+        reason: row.get(4)?,
+        created_at: row.get(5)?,
+    })
+}
+
+fn map_activity_segment(row: &Row<'_>) -> rusqlite::Result<ActivitySegment> {
+    Ok(ActivitySegment {
+        id: row.get(0)?,
+        app_name: row.get(1)?,
+        process_name: row.get(2)?,
+        window_title_redacted: row.get(3)?,
+        domain: row.get(4)?,
+        started_at: row.get(5)?,
+        ended_at: row.get(6)?,
+        duration_seconds: row.get(7)?,
+        privacy_state: row.get(8)?,
+        linked_focus_session_id: row.get(9)?,
+    })
+}
+
 fn now() -> String {
     Utc::now().to_rfc3339()
 }
@@ -715,6 +1189,37 @@ fn minutes_between(started_at: &str, ended_at: &str) -> i64 {
         .map(|value| value.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
     (end - start).num_minutes().max(0)
+}
+
+fn parse_datetime(value: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|date| date.with_timezone(&Utc))
+        .ok()
+}
+
+fn parse_window(start: &str, end: &str) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+    Some((parse_datetime(start)?, parse_datetime(end)?))
+}
+
+fn push_focus_slot(
+    suggestions: &mut Vec<FocusSlotSuggestion>,
+    gap_start: DateTime<Utc>,
+    gap_end: DateTime<Utc>,
+    preferred_minutes: i64,
+    task_id: Option<String>,
+) {
+    let available_minutes = (gap_end - gap_start).num_minutes();
+    if available_minutes < 15 {
+        return;
+    }
+    let duration_minutes = available_minutes.min(preferred_minutes);
+    suggestions.push(FocusSlotSuggestion {
+        starts_at: gap_start.to_rfc3339(),
+        ends_at: (gap_start + chrono::Duration::minutes(duration_minutes)).to_rfc3339(),
+        duration_minutes,
+        reason: format!("Open gap with {available_minutes} free minutes before the next busy block."),
+        task_id,
+    });
 }
 
 fn collect_rows<T, F>(rows: MappedRows<'_, F>) -> AppResult<Vec<T>>

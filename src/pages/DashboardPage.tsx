@@ -52,6 +52,9 @@ export function DashboardPage() {
               createTask(
                 {
                   title: input.title,
+                  description: input.description,
+                  priority: input.priority,
+                  dueAt: input.dueAt,
                   estimatedMinutes: input.estimatedMinutes
                 },
                 date
@@ -96,8 +99,8 @@ export function DashboardPage() {
                   await setTaskStatus(selectedTask.id, "in_progress", date);
                 }}
                 onMarkDone={(selectedTask) => setTaskStatus(selectedTask.id, "done", date)}
-                onStuck={async (selectedTask) => {
-                  await markStuck(selectedTask.id, "activation_friction");
+                onStuck={async (selectedTask, reason) => {
+                  await markStuck(selectedTask.id, reason);
                   await setTaskStatus(selectedTask.id, "stuck", date);
                 }}
               />

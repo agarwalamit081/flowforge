@@ -10,6 +10,7 @@ interface TaskDetailPanelProps {
     title?: string;
     description?: string | null;
     priority?: number;
+    dueAt?: string | null;
     estimatedMinutes?: number | null;
     goodEnoughDefinition?: string | null;
   }) => Promise<void>;
@@ -22,6 +23,7 @@ interface TaskFormValues {
   title: string;
   description: string;
   priority: number;
+  dueAt: string;
   estimatedMinutes: number;
   goodEnoughDefinition: string;
   microTaskTitle: string;
@@ -45,6 +47,7 @@ export function TaskDetailPanel({
       title: "",
       description: "",
       priority: 3,
+      dueAt: "",
       estimatedMinutes: 25,
       goodEnoughDefinition: ""
     }
@@ -68,6 +71,7 @@ export function TaskDetailPanel({
       title: task.title,
       description: task.description ?? "",
       priority: task.priority,
+      dueAt: task.dueAt ? new Date(task.dueAt).toISOString().slice(0, 16) : "",
       estimatedMinutes: task.estimatedMinutes ?? 25,
       goodEnoughDefinition: task.goodEnoughDefinition ?? ""
     });
@@ -101,6 +105,7 @@ export function TaskDetailPanel({
             title: values.title,
             description: values.description || null,
             priority: values.priority,
+            dueAt: values.dueAt ? new Date(values.dueAt).toISOString() : "",
             estimatedMinutes: values.estimatedMinutes,
             goodEnoughDefinition: values.goodEnoughDefinition || null
           });
@@ -112,6 +117,7 @@ export function TaskDetailPanel({
           <input className="input" max={5} min={1} type="number" {...register("priority", { valueAsNumber: true })} />
           <input className="input" min={5} step={5} type="number" {...register("estimatedMinutes", { valueAsNumber: true })} />
         </div>
+        <input className="input" type="datetime-local" {...register("dueAt")} />
         <textarea className="input min-h-24" placeholder="Good enough definition" {...register("goodEnoughDefinition")} />
         <div className="flex gap-3">
           <button className="button-primary" type="submit">

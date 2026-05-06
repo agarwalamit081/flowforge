@@ -122,6 +122,97 @@ pub struct FocusSession {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CalendarAccount {
+    pub id: String,
+    pub provider: String,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub sync_enabled: bool,
+    pub last_synced_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarEvent {
+    pub id: String,
+    pub provider_event_id: String,
+    pub account_id: String,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub busy_status: String,
+    pub location: Option<String>,
+    pub meeting_url: Option<String>,
+    pub source_updated_at: Option<String>,
+    pub local_updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusBlock {
+    pub id: String,
+    pub task_id: Option<String>,
+    pub calendar_event_id: Option<String>,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub status: String,
+    pub created_by: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitoringRule {
+    pub id: String,
+    pub rule_type: String,
+    pub pattern: String,
+    pub action: String,
+    pub reason: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivitySegment {
+    pub id: String,
+    pub app_name: Option<String>,
+    pub process_name: Option<String>,
+    pub window_title_redacted: Option<String>,
+    pub domain: Option<String>,
+    pub started_at: String,
+    pub ended_at: String,
+    pub duration_seconds: i64,
+    pub privacy_state: String,
+    pub linked_focus_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextSnapshot {
+    pub generated_at: String,
+    pub state: String,
+    pub active_calendar_event_id: Option<String>,
+    pub active_focus_block_id: Option<String>,
+    pub current_task_id: Option<String>,
+    pub activity_summary: Option<String>,
+    pub nudge: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusSlotSuggestion {
+    pub starts_at: String,
+    pub ends_at: String,
+    pub duration_minutes: i64,
+    pub reason: String,
+    pub task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TodayAgenda {
     pub date: String,
     pub outcomes: Vec<DailyOutcome>,
@@ -241,4 +332,49 @@ pub struct SettingsPatch {
     pub default_focus_minutes: Option<i64>,
     pub default_ai_provider: Option<String>,
     pub default_ai_model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarConnectRequest {
+    pub provider: String,
+    pub authorization_code: String,
+    pub redirect_uri: String,
+    pub code_verifier: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalendarRangeRequest {
+    pub start: String,
+    pub end: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusSlotSuggestionRequest {
+    pub task_id: Option<String>,
+    pub start: String,
+    pub end: String,
+    pub preferred_minutes: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFocusBlockRequest {
+    pub task_id: Option<String>,
+    pub calendar_event_id: Option<String>,
+    pub title: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub created_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMonitoringRuleRequest {
+    pub rule_type: String,
+    pub pattern: String,
+    pub action: String,
+    pub reason: Option<String>,
 }

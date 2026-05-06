@@ -1,4 +1,5 @@
-import { Play, Sparkles, CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import { Play, Sparkles, CheckCircle2, ArrowRight } from "lucide-react";
 import type { Task } from "../types/domain";
 
 const priorityBorders: Record<Task["priority"], string> = {
@@ -14,10 +15,13 @@ interface TaskCardProps {
   onOpen: (task: Task) => Promise<void> | void;
   onStart: (task: Task) => Promise<void>;
   onMarkDone: (task: Task) => Promise<void>;
-  onStuck: (task: Task) => Promise<void>;
+  onStuck: (task: Task, reason: string) => Promise<void>;
 }
 
 export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCardProps) {
+  const [showStuckChooser, setShowStuckChooser] = useState(false);
+  const [stuckReason, setStuckReason] = useState("activation_friction");
+
   return (
     <article className={`card border-l-4 ${priorityBorders[task.priority]}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -28,6 +32,7 @@ export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCar
           <p className="mt-1 text-sm text-ink/70">
             Status: {task.status.replace("_", " ")} · Est. {task.estimatedMinutes ?? 0} min
           </p>
+          {task.description && <p className="mt-3 text-sm text-ink/80">{task.description}</p>}
           {task.goodEnoughDefinition && (
             <p className="mt-3 rounded-2xl bg-leaf/30 px-3 py-2 text-sm text-ink/80">
               Good enough: {task.goodEnoughDefinition}
@@ -35,11 +40,15 @@ export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCar
           )}
         </div>
         <div className="flex gap-2">
+          <button className="button-secondary" onClick={() => onOpen(task)} type="button">
+            <ArrowRight className="mr-2" size={16} />
+            Details
+          </button>
           <button className="button-secondary" onClick={() => onStart(task)} type="button">
             <Play className="mr-2" size={16} />
             Start
           </button>
-          <button className="button-secondary" onClick={() => onStuck(task)} type="button">
+          <button className="button-secondary" onClick={() => setShowStuckChooser((value) => !value)} type="button">
             <Sparkles className="mr-2" size={16} />
             Stuck
           </button>
@@ -49,6 +58,30 @@ export function TaskCard({ task, onOpen, onStart, onMarkDone, onStuck }: TaskCar
           </button>
         </div>
       </div>
+      {showStuckChooser && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-white/70 px-3 py-3">
+          <select className="input max-w-xs" onChange={(event) => setStuckReason(event.target.value)} value={stuckReason}>
+            <option value="activation_friction">Activation friction</option>
+            <option value="unclear_scope">Unclear scope</option>
+            <option value="too_big">Too big</option>
+            <option value="boring">Boring</option>
+            <option value="anxious">Anxious</option>
+            <option value="perfectionism">Perfectionism</option>
+            <option value="waiting">Waiting</option>
+            <option value="tired">Tired</option>
+          </select>
+          <button
+            className="button-primary"
+            onClick={async () => {
+              await onStuck(task, stuckReason);
+              setShowStuckChooser(false);
+            }}
+            type="button"
+          >
+            Save reason
+          </button>
+        </div>
+      )}
       {task.microTasks.length > 0 && (
         <ul className="mt-4 space-y-2 text-sm text-ink/80">
           {task.microTasks.map((microTask) => (

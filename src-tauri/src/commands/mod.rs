@@ -130,3 +130,99 @@ pub fn get_app_settings(db: State<'_, Database>) -> CommandResult<AppSettings> {
 pub fn update_app_settings(db: State<'_, Database>, patch: SettingsPatch) -> CommandResult<AppSettings> {
     map_err(db.update_app_settings(patch))
 }
+
+#[tauri::command]
+pub fn connect_calendar(
+    db: State<'_, Database>,
+    input: CalendarConnectRequest,
+) -> CommandResult<CalendarAccount> {
+    map_err(db.connect_calendar(input))
+}
+
+#[tauri::command]
+pub fn disconnect_calendar(db: State<'_, Database>, account_id: String) -> CommandResult<()> {
+    map_err(db.disconnect_calendar(&account_id))
+}
+
+#[tauri::command]
+pub fn list_calendar_accounts(db: State<'_, Database>) -> CommandResult<Vec<CalendarAccount>> {
+    map_err(db.list_calendar_accounts())
+}
+
+#[tauri::command]
+pub fn list_calendar_events(
+    db: State<'_, Database>,
+    range: CalendarRangeRequest,
+) -> CommandResult<Vec<CalendarEvent>> {
+    map_err(db.list_calendar_events(&range.start, &range.end))
+}
+
+#[tauri::command]
+pub fn suggest_focus_slots(
+    db: State<'_, Database>,
+    input: FocusSlotSuggestionRequest,
+) -> CommandResult<Vec<FocusSlotSuggestion>> {
+    map_err(db.suggest_focus_slots(input))
+}
+
+#[tauri::command]
+pub fn create_focus_block(
+    db: State<'_, Database>,
+    input: CreateFocusBlockRequest,
+) -> CommandResult<FocusBlock> {
+    map_err(db.create_focus_block(input))
+}
+
+#[tauri::command]
+pub fn cancel_focus_block(db: State<'_, Database>, id: String) -> CommandResult<FocusBlock> {
+    map_err(db.cancel_focus_block(&id))
+}
+
+#[tauri::command]
+pub fn start_focus_block(db: State<'_, Database>, id: String) -> CommandResult<FocusBlock> {
+    map_err(db.start_focus_block(&id))
+}
+
+#[tauri::command]
+pub fn end_focus_block(db: State<'_, Database>, id: String) -> CommandResult<FocusBlock> {
+    map_err(db.end_focus_block(&id))
+}
+
+#[tauri::command]
+pub fn list_focus_blocks(
+    db: State<'_, Database>,
+    range: CalendarRangeRequest,
+) -> CommandResult<Vec<FocusBlock>> {
+    map_err(db.list_focus_blocks(&range.start, &range.end))
+}
+
+#[tauri::command]
+pub fn list_monitoring_rules(db: State<'_, Database>) -> CommandResult<Vec<MonitoringRule>> {
+    map_err(db.list_monitoring_rules())
+}
+
+#[tauri::command]
+pub fn create_monitoring_rule(
+    db: State<'_, Database>,
+    input: CreateMonitoringRuleRequest,
+) -> CommandResult<MonitoringRule> {
+    map_err(db.create_monitoring_rule(input))
+}
+
+#[tauri::command]
+pub fn delete_monitoring_rule(db: State<'_, Database>, id: String) -> CommandResult<()> {
+    map_err(db.delete_monitoring_rule(&id))
+}
+
+#[tauri::command]
+pub fn get_activity_log(
+    db: State<'_, Database>,
+    range: CalendarRangeRequest,
+) -> CommandResult<Vec<ActivitySegment>> {
+    map_err(db.get_activity_log(&range.start, &range.end))
+}
+
+#[tauri::command]
+pub fn get_context_snapshot(db: State<'_, Database>) -> CommandResult<ContextSnapshot> {
+    map_err(db.get_context_snapshot())
+}
