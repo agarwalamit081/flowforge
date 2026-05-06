@@ -29,6 +29,15 @@ export default function App() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   useKeyboardShortcuts();
 
+  // Early theme injection to prevent flash and layout shift
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("flowforge-theme");
+    const root = document.documentElement;
+    if (savedTheme && (savedTheme === "light" || savedTheme === "dark")) {
+      root.classList.add(`theme-${savedTheme}`);
+    }
+  }, []);
+
   useEffect(() => {
     if (!settings) {
       void loadSettings();
@@ -84,7 +93,7 @@ export default function App() {
   return (
     <ToastProvider>
       <div className="min-h-screen px-4 py-6 text-ink md:px-8">
-        <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[240px_1fr]">
+        <div className="mx-auto grid w-full max-w-[1400px] gap-6 lg:grid-cols-[240px_1fr]">
           <aside className="card h-fit">
             <div className="mb-8">
               <p className="text-sm font-medium uppercase tracking-[0.3em] text-moss">FlowForge</p>
