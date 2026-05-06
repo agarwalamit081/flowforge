@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Command, Calendar, LayoutDashboard, X } from "lucide-react";
+import { Plus, Calendar, LayoutDashboard, X } from "lucide-react";
 
 interface KeyboardShortcut {
   key: string;
@@ -27,15 +27,6 @@ export function useKeyboardShortcuts(
           const taskInput = document.querySelector("input[placeholder*='Quick capture']") as HTMLInputElement;
           taskInput?.focus();
         }, 100);
-      }
-    },
-    {
-      key: "ctrl+k",
-      description: "Command palette",
-      icon: Command,
-      action: () => {
-        // TODO: Implement command palette
-        console.log("Command palette - coming soon");
       }
     },
     {

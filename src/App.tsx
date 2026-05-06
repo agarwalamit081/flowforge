@@ -12,6 +12,7 @@ import { useFlowForgeStore } from "./stores/useFlowForgeStore";
 import { ToastProvider } from "./contexts/ToastContext";
 import { ToastContainer } from "./components/Toast";
 import { OnboardingWizard, useOnboarding } from "./components/OnboardingWizard";
+import { CommandPalette } from "./components/CommandPalette";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 const navItems = [
@@ -121,6 +122,7 @@ export default function App() {
         <ToastContainer />
         {showOnboarding && <OnboardingWizard onClose={() => setShowOnboarding(false)} />}
       </div>
+      <CommandPalette />
     </ToastProvider>
   );
 }
