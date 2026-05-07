@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "flowforge_lib"
+name = "flowforge"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
